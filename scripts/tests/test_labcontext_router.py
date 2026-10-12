@@ -22,6 +22,8 @@ from labcontext import (  # noqa: E402
     process_status,
     recovery_failure_from_diagnostics,
     recovery_preflight,
+    recovery_worker,
+    recover_bridge_conflict,
     ssh_command,
     stop_verified_orphan_components,
     wait_for_post_cleanup_validation,
@@ -126,6 +128,14 @@ def start_fake(name: str) -> tuple[ThreadingHTTPServer, str]:
 
 class RouterTest(unittest.TestCase):
     def setUp(self) -> None:
+        state = tempfile.TemporaryDirectory()
+        self.addCleanup(state.cleanup)
+        environment = mock.patch.dict(os.environ, {
+            "LABCONTEXT_STATUS_FILE": str(Path(state.name) / "launcher.json"),
+            "LABCONTEXT_ENABLE_TUNNEL": "0",
+        })
+        environment.start()
+        self.addCleanup(environment.stop)
         self.local_server, local_url = start_fake("local")
         self.remote_server, remote_url = start_fake("server")
         providers = [
@@ -534,6 +544,67 @@ class LauncherTest(unittest.TestCase):
             })
         self.assertFalse(ok)
         self.assertIn("remote port forwarding failed", detail)
+
+    def test_automatic_bridge_recovery_cleans_and_verifies(self) -> None:
+        conflict = "Error: remote port forwarding failed for listen port 17987"
+        with mock.patch("labcontext.probe_ssh_remote_forward", side_effect=[
+            (False, conflict), (False, conflict), (True, "ok"),
+        ]), mock.patch("labcontext.cleanup_managed_remote_forward", return_value=(True, "stopped PID 42")) as cleanup, \
+                mock.patch("labcontext.time.sleep"):
+            ok, detail = recover_bridge_conflict({})
+        self.assertTrue(ok)
+        self.assertIn("PID 42", detail)
+        cleanup.assert_called_once()
+
+    def test_automatic_bridge_recovery_refuses_unmarked_conflict(self) -> None:
+        conflict = "Error: remote port forwarding failed for listen port 17987"
+        with mock.patch("labcontext.probe_ssh_remote_forward", return_value=(False, conflict)), \
+                mock.patch("labcontext.cleanup_managed_remote_forward", return_value=(False, "marker is absent")):
+            ok, detail = recover_bridge_conflict({})
+        self.assertFalse(ok)
+        self.assertIn("cleanup refused", detail)
+        self.assertIn("marker is absent", detail)
+
+    def test_automatic_bridge_recovery_does_not_clean_network_failure(self) -> None:
+        with mock.patch("labcontext.probe_ssh_remote_forward", return_value=(False, "Connection closed")), \
+                mock.patch("labcontext.cleanup_managed_remote_forward") as cleanup:
+            ok, detail = recover_bridge_conflict({})
+        self.assertFalse(ok)
+        self.assertEqual(detail, "Connection closed")
+        cleanup.assert_not_called()
+
+    def test_automatic_bridge_recovery_reports_persistent_conflict(self) -> None:
+        conflict = "Error: remote port forwarding failed for listen port 17987"
+        with mock.patch("labcontext.probe_ssh_remote_forward", return_value=(False, conflict)), \
+                mock.patch("labcontext.cleanup_managed_remote_forward", return_value=(True, "stopped PID 42")), \
+                mock.patch("labcontext.time.monotonic", side_effect=[0, 16]):
+            ok, detail = recover_bridge_conflict({})
+        self.assertFalse(ok)
+        self.assertIn("still unavailable", detail)
+
+    def test_automatic_bridge_recovery_never_repeatedly_evicts_sessions(self) -> None:
+        conflict = "Error: remote port forwarding failed for listen port 17987"
+        with mock.patch("labcontext.probe_ssh_remote_forward", return_value=(False, conflict)), \
+                mock.patch("labcontext.cleanup_managed_remote_forward") as cleanup:
+            ok, detail = recover_bridge_conflict({}, allow_cleanup=False)
+        self.assertFalse(ok)
+        self.assertIn("limit reached", detail)
+        cleanup.assert_not_called()
+
+    def test_recovery_worker_waits_for_concurrent_launcher_to_be_ready(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            values = {"LABCONTEXT_RECOVERY_LOG_FILE": str(Path(directory) / "repair.log")}
+            child = mock.Mock(pid=42)
+            child.poll.return_value = 0
+            with mock.patch("labcontext.recovery_preflight", return_value=(0, "ok", True)), \
+                    mock.patch("labcontext.fetch_router_status", side_effect=[None, {"overall": "degraded"}, {"overall": "ready"}]), \
+                    mock.patch("labcontext.load_config", return_value=mock.Mock(listen_addr="127.0.0.1:1460")), \
+                    mock.patch("labcontext.subprocess.Popen", return_value=child), \
+                    mock.patch("labcontext.time.sleep"), \
+                    mock.patch("labcontext.write_recovery_status") as write:
+                result = recovery_worker(Path(directory) / "config.toml", values)
+            self.assertEqual(result, 0)
+            self.assertEqual(write.call_args.args[1]["phase"], "succeeded")
 
 
 if __name__ == "__main__":

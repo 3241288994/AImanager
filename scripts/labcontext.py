@@ -908,6 +908,30 @@ def repair(config_path: Path, values: dict[str, str]) -> int:
     return run(config_path, values)
 
 
+def recover_bridge_conflict(values: dict[str, str], *, allow_cleanup: bool = True) -> tuple[bool, str]:
+    """Recover only a verified managed session after a failed bridge exit.
+
+    The caller must have observed its own bridge exit first; probing a port
+    while that bridge is alive would mistake our own listener for a conflict.
+    """
+    ok, detail = probe_ssh_remote_forward(values)
+    if ok or "remote port forwarding failed" not in detail.lower():
+        return False, detail
+    if not allow_cleanup:
+        return False, f"{detail}\nAutomatic cleanup limit reached; run labcontext repair after inspecting competing sessions."
+    cleaned, cleanup_detail = cleanup_managed_remote_forward(values)
+    if not cleaned:
+        return False, f"{detail}\nAutomatic cleanup refused: {cleanup_detail}"
+    deadline = time.monotonic() + 15
+    while True:
+        ok, detail = probe_ssh_remote_forward(values)
+        if ok:
+            return True, cleanup_detail
+        if "remote port forwarding failed" not in detail.lower() or time.monotonic() >= deadline:
+            return False, f"{cleanup_detail}\nReverse forwarding still unavailable: {detail}"
+        time.sleep(0.5)
+
+
 def write_recovery_status(values: dict[str, str], payload: dict[str, object]) -> None:
     path = Path(values.get(
         "LABCONTEXT_RECOVERY_STATUS_FILE", str(DEFAULT_RECOVERY_STATUS_PATH),
@@ -1137,8 +1161,6 @@ def recovery_worker(config_path: Path, values: dict[str, str]) -> int:
     deadline = time.monotonic() + 45
     last_status: dict[str, object] | None = None
     while time.monotonic() < deadline:
-        if launcher.poll() is not None:
-            break
         last_status = fetch_router_status(address)
         if last_status and last_status.get("overall") == "ready":
             write_recovery_status(values, {
@@ -1150,6 +1172,11 @@ def recovery_worker(config_path: Path, values: dict[str, str]) -> int:
                 "completedAt": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
             })
             return 0
+        # A concurrent launcher may already own the stack; run() exits zero
+        # in that case. Keep validating the live Router during its startup,
+        # instead of reporting failure because this redundant child exited.
+        if launcher.poll() not in (None, 0):
+            break
         time.sleep(1)
 
     write_recovery_status(values, {
@@ -1193,6 +1220,7 @@ def run(config_path: Path, values: dict[str, str]) -> int:
     status_path = runtime_status_path(values)
     started_at = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
     shutting_down = False
+    bridge_cleanup_attempted = False
 
     def start_component(label: str, command: list[str], restart: bool = True) -> subprocess.Popen[bytes]:
         process = subprocess.Popen(command, env=environment, start_new_session=True)
@@ -1272,6 +1300,23 @@ def run(config_path: Path, values: dict[str, str]) -> int:
                         restart_attempts[label] = 0
                     continue
                 if label not in restart_after:
+                    if label == "SSH bridge" and status == 255:
+                        # Bounded to one cleanup per launcher lifetime: never
+                        # repeatedly evict a competing machine's managed bridge.
+                        recovered, detail = recover_bridge_conflict(
+                            values, allow_cleanup=not bridge_cleanup_attempted,
+                        )
+                        bridge_cleanup_attempted = True
+                        print(f"labcontext: automatic SSH recovery: {detail}", file=sys.stderr)
+                        if not recovered and "remote port forwarding failed" in detail.lower():
+                            write_recovery_status(values, {
+                                "phase": "failed",
+                                **recovery_failure_from_diagnostics(detail, values),
+                            })
+                            # Keep local access available, but stop retrying a
+                            # persistent bind failure until an explicit repair.
+                            restart_commands.pop(label, None)
+                            continue
                     attempt = restart_attempts.get(label, 0) + 1
                     restart_attempts[label] = attempt
                     restart_after[label] = now + min(30, 2 ** min(attempt - 1, 4))

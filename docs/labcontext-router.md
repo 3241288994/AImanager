@@ -107,6 +107,10 @@ token 或其他凭据。一键修复状态和日志默认写入同目录的 `rec
 `LABCONTEXT_RECOVERY_LOG_FILE`、`LABCONTEXT_TUNNEL_HEALTH_URL` 与
 `LABCONTEXT_DASHBOARD_URL` 调整对应地址。local Provider、SSH 或 Tunnel 异常退出时，Router 与连接
 中心会继续运行，启动器采用有上限的退避自动重试；因此可以看见真实错误，而不是整套服务反复消失。
+SSH bridge 退出且确认反向端口冲突时，监督器会自动尝试一次带 PID 标记的安全清理并复验端口，
+成功后重连，无需手动运行 repair。每个启动器生命周期最多清理一次，避免与另一台电脑反复抢占。
+标记缺失、身份不匹配或清理后仍冲突时，会停止该桥接的重复重试，将原因写入连接中心修复状态；
+本地 Provider 和 Router 保持运行。解决提示中的问题后，点击“一键修复”或运行 `labcontext repair`。
 
 当 Router 仍在但某个子链路已经失效时，重复执行裸 `labcontext` 不会启动第二套进程。此时：
 
