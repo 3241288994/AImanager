@@ -20,6 +20,7 @@ from .context import (
     resolve_workspace, search_evidence_data, workspace_overview_data,
 )
 from .direct_path import inspect_path_data
+from .collaboration import register_collaboration
 from .index import compare_experiments as compare_indexed_experiments
 from .index import query_experiments as query_indexed_experiments
 from .summarizer import get_job as get_analysis_job
@@ -487,6 +488,7 @@ def build_server(config: ServerConfig) -> FastMCP:
             return JSONResponse({"error": str(exc), "error_type": "revision_conflict"}, status_code=409)
         except (ResearchMapError, ValueError, OSError, KeyError, TypeError) as exc:
             return JSONResponse({"error": str(exc)}, status_code=400)
+    register_collaboration(mcp, runtime)
     return mcp
 
 

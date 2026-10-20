@@ -16,8 +16,8 @@ from unittest import mock
 
 SCRIPTS = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(SCRIPTS))
-from ai_collab import jobs, providers
-from ai_collab.config import CollabError, atomic_json, defaults, load, resolve
+from ai_collab import jobs, providers, native, bridge, remote
+from ai_collab.config import CollabError, atomic_json, defaults, load, resolve, provider_path, user_home
 
 
 class Endpoint(BaseHTTPRequestHandler):
@@ -98,6 +98,15 @@ class CollaborationTest(unittest.TestCase):
         self.assertEqual(resolve(self.config, "Gemini 4")["provider"], "gemini-web")
         with self.assertRaises(CollabError):
             resolve(self.config, "opus9.9")
+
+    def test_harness_home_does_not_change_collaboration_provider_paths(self):
+        isolated = self.root / "isolated-profile"
+        isolated.mkdir()
+        with mock.patch.dict(os.environ, {"HOME": str(isolated), "AI_COLLAB_HOME": str(self.root)}):
+            self.assertEqual(Path.home(), isolated)
+            self.assertEqual(user_home(), self.root)
+            self.assertEqual(provider_path("~/.codex"), self.root / ".codex")
+            self.assertEqual(provider_path("/explicit/profile"), Path("/explicit/profile"))
 
     def test_unknown_model_never_submits(self):
         code, payload = self.cli("run", "--model", "opus9.9", "--prompt", "hello")
@@ -269,7 +278,7 @@ class CollaborationTest(unittest.TestCase):
             self.assertFalse(jobs.terminate(child))
         self.assertEqual(child.wait.call_count, 2)
 
-    def test_workspace_is_only_available_for_claude(self):
+    def test_workspace_is_not_available_for_api(self):
         code, payload = self.cli("run", "--model", "gemini4", "--prompt", "review", "--workspace", str(self.root))
         self.assertEqual(code, 1)
         self.assertEqual(payload["error"]["code"], "workspace_not_supported")
@@ -330,6 +339,162 @@ class CollaborationTest(unittest.TestCase):
         code, value = self.cli("--json", "nonexistent")
         self.assertEqual(code, 1)
         self.assertFalse(value["ok"])
+
+    def test_api_reply_replays_history_and_rejects_stale_parent(self):
+        first = self.submit("First turn: budget is 120")
+        self.assertEqual(jobs.wait(first, 10)["state"], "succeeded")
+        second = jobs.reply(first, "What was the budget?")
+        self.submitted.append(second["id"])
+        self.assertEqual(jobs.wait(second["id"], 10)["state"], "succeeded")
+        messages = Endpoint.calls[-1]["messages"]
+        self.assertEqual([m["role"] for m in messages], ["user", "assistant", "user"])
+        self.assertIn("budget is 120", messages[0]["content"])
+        self.assertEqual(messages[1]["content"], "fixture answer")
+        self.assertEqual(second["conversationId"], first)
+        self.assertEqual(second["access"], "text")
+        with self.assertRaises(CollabError) as caught:
+            jobs.reply(first, "Do not fork the session")
+        self.assertEqual(caught.exception.code, "stale_reply")
+
+    def test_bridge_owns_jobs_and_rechecks_stored_route(self):
+        self.config["mcp"] = {"enabled": True, "models": ["gemini4"],
+                              "allowedRoots": [str(self.root)], "allowExec": False}
+        atomic_json(self.root / "config.json", self.config)
+        personal = self.submit()
+        with self.assertRaises(CollabError) as caught:
+            bridge.dispatch({"operation": "status", "arguments": {"job_id": personal}})
+        self.assertEqual(caught.exception.code, "job_not_allowed")
+        task = bridge.dispatch({"operation": "run", "arguments": {"model": "gemini4", "prompt": "task"}})
+        self.submitted.append(task["id"])
+        self.assertEqual(jobs.wait(task["id"], 10)["state"], "succeeded")
+        self.assertEqual(bridge.dispatch({"operation": "result", "arguments": {"job_id": task["id"]}})["text"], "fixture answer")
+        self.config["models"]["gemini4"]["model"] = "new-model"
+        atomic_json(self.root / "config.json", self.config)
+        with self.assertRaises(CollabError) as caught:
+            bridge.dispatch({"operation": "result", "arguments": {"job_id": task["id"]}})
+        self.assertEqual(caught.exception.code, "model_not_allowed")
+
+    def test_bridge_blocks_exec_and_symlink_escape(self):
+        rules = {"models": ["opus5.5"], "allowedRoots": [str(self.root)], "allowExec": False}
+        with self.assertRaises(CollabError) as caught:
+            bridge.allowed(self.config, rules, "opus5.5", [str(self.root)], "exec")
+        self.assertEqual(caught.exception.code, "exec_not_allowed")
+        (self.root / "escape").symlink_to("/usr")
+        with self.assertRaises(CollabError) as caught:
+            bridge.allowed(self.config, rules, "opus5.5", [str(self.root / "escape")], "read")
+        self.assertEqual(caught.exception.code, "workspace_not_allowed")
+
+    def test_exec_lock_blocks_overlapping_roots(self):
+        self.config["models"]["native"] = {"provider": "codex-cli", "model": "fixture", "aliases": []}
+        nested = self.root / "nested"
+        nested.mkdir()
+        active = "b" * 32
+        atomic_json(jobs.directory(active) / "status.json", {
+            "id": active, "state": "running", "createdAt": time.time(), "access": "exec",
+            "workerPid": os.getpid(), "workerIdentity": jobs.process_identity(os.getpid()),
+            "workspaces": [{"path": str(self.root)}],
+        })
+        with mock.patch.object(native, "codex_identity", return_value=(self.root, "identity", "test")), \
+                mock.patch.object(native, "codex_command", return_value=([], {}, "test")):
+            with self.assertRaises(CollabError) as caught:
+                jobs.submit(self.config, "native", "edit", [], "collaborator", str(nested), 10,
+                            workspaces=[str(nested)], access="exec")
+        self.assertEqual(caught.exception.code, "workspace_busy")
+
+    def test_claude_multiple_exec_events_and_read_denial(self):
+        events = [{"type": "assistant", "message": {"content": [
+            {"type": "tool_use", "name": name, "input": {"command": "python check.py"}}
+        ]}} for name in ["Bash", "Edit", "Bash"]]
+        events.append({"type": "result", "result": "done", "modelUsage": {"claude-opus-5-5": {}}})
+        raw = "\n".join(map(json.dumps, events))
+        value = providers.parse_claude_stream(raw, "claude-opus-5-5", "exec")
+        self.assertEqual(len(value["fileAccesses"]), 3)
+        with self.assertRaises(CollabError):
+            providers.parse_claude_stream(raw, "claude-opus-5-5", "read")
+
+    def test_codex_stream_requires_completion_and_honest_identity(self):
+        events = [{"type": "thread.started", "thread_id": "a" * 32},
+                  {"type": "item.completed", "item": {"type": "agent_message", "text": "done"}},
+                  {"type": "turn.completed", "usage": {"input_tokens": 5}}]
+        value = native.parse_codex("\n".join(map(json.dumps, events)), "requested")
+        self.assertEqual(value["modelIdentityEvidence"], "explicit_request_only")
+        recovered = [{"type": "error", "message": "Reconnecting"}] + events
+        self.assertEqual(native.parse_codex("\n".join(map(json.dumps, recovered)), "requested")["text"], "done")
+        with self.assertRaises(CollabError):
+            native.parse_codex("\n".join(map(json.dumps, events[:-1])), "requested")
+        events[0]["model"] = "different"
+        with self.assertRaises(CollabError) as caught:
+            native.parse_codex("\n".join(map(json.dumps, events)), "requested")
+        self.assertEqual(caught.exception.code, "model_mismatch")
+
+    def test_native_account_switch_is_rejected(self):
+        with mock.patch.object(native, "codex_identity", return_value=(self.root, "new", "test")):
+            with self.assertRaises(CollabError) as caught:
+                native.codex_command(self.config, {"model": "fixture"}, "original", "read",
+                                     [{"path": str(self.root)}])
+        self.assertEqual(caught.exception.code, "account_changed")
+
+    def test_stdio_mcp_survives_io_failure_and_bad_requests(self):
+        import io
+        requests = [{"jsonrpc": "2.0", "id": 1, "method": "tools/list"},
+                    [], {"jsonrpc": "2.0", "id": 2, "method": "ping"}]
+        output = io.StringIO()
+        with mock.patch.object(sys, "stdin", io.StringIO("\n".join(map(json.dumps, requests)))), \
+                mock.patch.object(sys, "stdout", output), \
+                mock.patch.object(bridge, "tools", side_effect=OSError("private-path")):
+            bridge.serve()
+        values = [json.loads(line) for line in output.getvalue().splitlines()]
+        self.assertEqual(len(values), 3)
+        self.assertIn("error", values[0])
+        self.assertNotIn("private-path", output.getvalue())
+        self.assertEqual(values[-1]["result"], {})
+
+    def test_cleanup_reaps_background_command_after_leader_exit(self):
+        child = subprocess.Popen([sys.executable, "-c",
+            "import subprocess; p=subprocess.Popen(['sleep','60']); print(p.pid,flush=True)"],
+            stdout=subprocess.PIPE, text=True, start_new_session=True)
+        descendant = int(child.stdout.readline())
+        child.wait(timeout=5)
+        try:
+            self.assertTrue(jobs.terminate(child))
+            deadline = time.monotonic() + 3
+            while time.monotonic() < deadline:
+                path = Path("/proc") / str(descendant) / "stat"
+                if not path.exists() or path.read_text().rsplit(")", 1)[1].split()[0] == "Z":
+                    break
+                time.sleep(0.02)
+            else:
+                self.fail("Background command remained active")
+        finally:
+            child.stdout.close()
+            with contextlib.suppress(ProcessLookupError):
+                os.kill(descendant, signal.SIGKILL)
+
+    def test_cleanup_does_not_signal_reused_group_leader(self):
+        child = mock.Mock(pid=123)
+        child._collab_identity = "original"
+        with mock.patch.object(jobs, "process_identity", return_value="replacement"), \
+                mock.patch.object(jobs.os, "killpg") as kill:
+            self.assertTrue(jobs.terminate(child))
+        kill.assert_not_called()
+
+    def test_remote_only_uses_configured_fixed_entrypoint(self):
+        self.config["hosts"] = {"server": {"ssh": "trusted", "entrypoint": "~/.local/bin/ai-collab"}}
+        atomic_json(self.root / "config.json", self.config)
+        payload = {"operation": "run", "prompt": "$(touch /tmp/nope); `id`"}
+        def start(command, **kwargs):
+            self.assertEqual(command[-2:], ["trusted", "~/.local/bin/ai-collab _remote"])
+            self.assertNotIn(payload["prompt"], " ".join(command))
+            kwargs["stdout"].write(json.dumps({"ok": True, "data": {
+                "id": "a" * 32, "conversationId": "a" * 32}}).encode())
+            child = mock.Mock()
+            child.communicate.side_effect = lambda body, timeout: self.assertEqual(json.loads(body), payload)
+            return child
+        with mock.patch.object(remote.subprocess, "Popen", side_effect=start):
+            result = remote.request("server", payload)
+        self.assertEqual(result["id"], "server:" + "a" * 32)
+        with self.assertRaises(CollabError):
+            remote.request("unconfigured", payload)
 
 
 if __name__ == "__main__":

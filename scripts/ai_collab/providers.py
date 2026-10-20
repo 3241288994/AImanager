@@ -5,12 +5,13 @@ import os
 from pathlib import Path
 import re
 import shlex
+import shutil
 import subprocess
 import urllib.error
 import urllib.parse
 import urllib.request
 
-from .config import CollabError, read_json
+from .config import CollabError, read_json, provider_path, user_home
 
 MAX_RESPONSE = 4 * 1024 * 1024
 
@@ -25,7 +26,7 @@ def version_tuple(value):
 def claude_version(config):
     try:
         output = subprocess.check_output(
-            [str(Path(config["claude"]["binary"]).expanduser()), "--version"],
+            [str(provider_path(config["claude"]["binary"])), "--version"],
             stderr=subprocess.DEVNULL, timeout=10, text=True,
         )
         return ".".join(map(str, version_tuple(output)))
@@ -34,7 +35,7 @@ def claude_version(config):
 
 
 def manager(config):
-    root = Path(config["claude"]["managerRoot"]).expanduser().resolve()
+    root = provider_path(config["claude"]["managerRoot"])
     path = root / "worker.py"
     if not path.is_file():
         raise CollabError("manager_unavailable", "Initialize AIManager's AI connections first")
@@ -69,7 +70,8 @@ def network_env(config):
     return env
 
 
-def claude_command(config, route, account_id, workspaces=None):
+def claude_command(config, route, account_id, workspaces=None, access=None, session_id=None, persist=False):
+    access = access or ("read" if workspaces else "text")
     version = claude_version(config)
     if route.get("minCliVersion") and version_tuple(version) < version_tuple(route["minCliVersion"]):
         raise CollabError("cli_upgrade_required", "Upgrade Claude Code to " + route["minCliVersion"] + " or newer")
@@ -81,14 +83,20 @@ def claude_command(config, route, account_id, workspaces=None):
                 "all_proxy", "NO_PROXY", "no_proxy"):
         if key in net:
             env[key] = net[key]
-    binary = str(Path(config["claude"]["binary"]).expanduser().resolve())
+    binary = str(provider_path(config["claude"]["binary"]))
     command = [
         binary, "-p", "--model", route["model"], "--output-format", "json",
         "--tools", "", "--permission-mode", "dontAsk", "--disable-slash-commands",
         "--setting-sources", "", "--settings", '{"disableAllHooks":true}',
         "--strict-mcp-config", "--mcp-config", '{"mcpServers":{}}',
-        "--no-session-persistence",
     ]
+    if not persist:
+        command += ["--no-session-persistence"]
+    if session_id:
+        from .native import valid_session
+        if not valid_session(session_id):
+            raise CollabError("not_resumable", "Invalid native session identity")
+        command += ["--resume", session_id]
     if workspaces:
         if version_tuple(version) < (2, 1, 304):
             raise CollabError("cli_upgrade_required", "Workspace read mode requires the verified Claude Code 2.1.304+ flags")
@@ -106,12 +114,37 @@ def claude_command(config, route, account_id, workspaces=None):
                     "--verbose", "--max-turns", "30"]
         for workspace in workspaces:
             command += ["--add-dir", workspace["path"]]
+    if access == "exec":
+        if not workspaces or len(workspaces) != 1:
+            raise CollabError("invalid_workspace", "Execution requires one specific workspace")
+        additions = config["claude"].get("sandboxPath", [])
+        if not isinstance(additions, list) or any(not isinstance(p, str) for p in additions):
+            raise CollabError("invalid_config", "claude.sandboxPath must contain executable directories")
+        env["PATH"] = os.pathsep.join([str(provider_path(p)) for p in additions] + [env.get("PATH", "")])
+        if not shutil.which("bwrap", path=env["PATH"]) or not shutil.which("socat", path=env["PATH"]):
+            raise CollabError("sandbox_unavailable", "Claude exec requires bubblewrap and socat on PATH")
+        tools = "Read,Glob,Grep,Edit,Write,Bash"
+        command[command.index("--tools") + 1] = tools
+        command[command.index("--allowedTools") + 1] = tools
+        # Safe mode disables execution; explicit exec instead requires the native
+        # Bash sandbox, with the unsandboxed escape hatch disabled.
+        command.remove("--safe-mode")
+        settings = json.loads(command[command.index("--settings") + 1])
+        settings["sandbox"] = {
+            "enabled": True, "failIfUnavailable": True, "allowUnsandboxedCommands": False,
+            "autoAllowBashIfSandboxed": True,
+            "filesystem": {"denyRead": [str(user_home() / ".ssh"), str(user_home() / ".codex"),
+                                        str(root / "profiles")],
+                           "denyWrite": [str(user_home() / ".config"), str(root)]},
+            "network": {"allowedDomains": []},
+        }
+        command[command.index("--settings") + 1] = json.dumps(settings)
     return command, env, version
 
 
 def gemini_settings(config):
     settings = {}
-    path = Path(config["geminiWeb"]["envFile"]).expanduser()
+    path = provider_path(config["geminiWeb"]["envFile"])
     if path.is_file():
         if path.stat().st_size > 65536:
             raise CollabError("invalid_credentials_file", "Gemini credential file exceeds size limit")
@@ -213,7 +246,7 @@ def parse_claude(payload, requested):
             "sessionId": payload.get("session_id"), "modelIdentityEvidence": "cli_metadata"}
 
 
-def parse_claude_stream(raw, requested):
+def parse_claude_stream(raw, requested, access="read"):
     final = None
     accesses = []
     pending = {}
@@ -230,20 +263,23 @@ def parse_claude_stream(raw, requested):
             for block in event.get("message", {}).get("content", []):
                 if isinstance(block, dict) and block.get("type") == "tool_use":
                     name = block.get("name")
-                    if name not in {"Read", "Glob", "Grep"}:
+                    allowed = {"Read", "Glob", "Grep"}
+                    if access == "exec":
+                        allowed |= {"Edit", "Write", "Bash"}
+                    if name not in allowed:
                         raise CollabError("unexpected_tool", "Workspace mode reported an unexpected tool")
                     arguments = block.get("input", {})
                     path = arguments.get("file_path") or arguments.get("path")
-                    access = {"tool": name, "path": path, "status": "requested"}
-                    accesses.append(access)
+                    record = {"tool": name, "path": path, "status": "requested"}
+                    accesses.append(record)
                     if block.get("id"):
-                        pending[block["id"]] = access
+                        pending[block["id"]] = record
         if event.get("type") == "user":
             for block in event.get("message", {}).get("content", []):
                 if isinstance(block, dict) and block.get("type") == "tool_result":
-                    access = pending.get(block.get("tool_use_id"))
-                    if access is not None:
-                        access["status"] = "denied_or_failed" if block.get("is_error") else "succeeded"
+                    record = pending.get(block.get("tool_use_id"))
+                    if record is not None:
+                        record["status"] = "denied_or_failed" if block.get("is_error") else "succeeded"
     if final is None:
         raise CollabError("incomplete_response", "Claude Code stream has no final result")
     result = parse_claude(final, requested)

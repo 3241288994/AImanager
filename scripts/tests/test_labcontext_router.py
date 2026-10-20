@@ -35,6 +35,7 @@ from labcontext_router import (  # noqa: E402
     RouterConfig,
     RouterError,
     RouterServer,
+    UpstreamMcp,
 )
 
 
@@ -89,6 +90,8 @@ class FakeLabContextHandler(BaseHTTPRequestHandler):
                 {"name": "workspace_overview", "description": "Overview", "inputSchema": {"type": "object", "properties": {"workspace_id": {"type": "string"}}, "required": ["workspace_id"]}},
                 {"name": "get_job", "description": "Job", "inputSchema": {"type": "object", "properties": {"job_id": {"type": "string"}}}},
                 {"name": "inspect_path", "description": "Direct path", "inputSchema": {"type": "object", "properties": {"path": {"type": "string"}}, "required": ["path"]}},
+                {"name": "collab_run", "description": "Run", "inputSchema": {"type": "object", "properties": {"model": {"type": "string"}}}},
+                {"name": "collab_status", "description": "Status", "inputSchema": {"type": "object", "properties": {"job_id": {"type": "string"}}}},
             ]
             self.reply({"jsonrpc": "2.0", "id": value.get("id"), "result": {"tools": tools}})
             return
@@ -104,6 +107,9 @@ class FakeLabContextHandler(BaseHTTPRequestHandler):
             payload = {"job_id": arguments.get("job_id"), "status": "completed"}
         elif tool == "inspect_path":
             payload = {"path": arguments.get("path"), "provider": self.source_name, "path_type": "file"}
+        elif tool.startswith("collab_"):
+            payload = {"ok": True, "data": {"id": arguments.get("job_id", "a" * 32),
+                       "conversationId": "a" * 32, "parentJobId": None}}
         else:
             payload = {"workspace_id": arguments.get("workspace_id"), "provider": self.source_name}
         result = {
@@ -196,6 +202,30 @@ class RouterTest(unittest.TestCase):
         result = self.router.call_tool("get_job", {"job_id": "server:job-1"})
         self.assertEqual(result["structuredContent"]["job_id"], "server:job-1")
         self.assertEqual(result["structuredContent"]["source"], "server")
+
+    def test_collaboration_jobs_preserve_source_without_workspace_registration(self) -> None:
+        tools, _ = self.router._tools(force=True)
+        schema = next(t["inputSchema"] for t in tools if t["name"] == "collab_run")
+        self.assertNotIn("workspace_ref", schema["properties"])
+        result = self.router.call_tool("collab_run", {"source": "server", "model": "fixture"})
+        task = result["structuredContent"]["data"]
+        self.assertEqual(task["id"], "server:" + "a" * 32)
+        result = self.router.call_tool("collab_status", {"job_id": task["id"]})
+        self.assertEqual(result["structuredContent"]["data"]["id"], task["id"])
+        sent = self.remote_server.RequestHandlerClass.calls[-1]
+        self.assertEqual(sent["params"]["arguments"], {"job_id": "a" * 32})
+        with self.assertRaises(RouterError):
+            self.router.call_tool("collab_status", {"job_id": task["id"], "source": "local"})
+
+    def test_collaboration_timeout_never_replays_submission(self) -> None:
+        client = UpstreamMcp(ProviderConfig("server", "Server", "http://127.0.0.1/mcp", "http://127.0.0.1/admin"))
+        client._session_id = "existing"
+        with mock.patch.object(client, "_request", side_effect=RouterError("timeout")) as request, \
+                mock.patch.object(client, "_initialize") as initialize:
+            with self.assertRaises(RouterError):
+                client.call("tools/call", {"name": "collab_run", "arguments": {"prompt": "task"}})
+        self.assertEqual(request.call_count, 1)
+        initialize.assert_not_called()
 
     def test_admin_bridge_maps_web_keys(self) -> None:
         result = self.router.admin_call("local", "upsertWorkspace", {

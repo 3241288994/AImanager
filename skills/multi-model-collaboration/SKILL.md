@@ -1,91 +1,63 @@
 ---
 name: multi-model-collaboration
-description: Collaborate with a user-named external model through ai-collab, including opus5.5/Opus 5.5/Claude Code and gemini4/Gemini 4/Argon. Use for delegated analysis, code proposals, independent review, research criticism, or when a model-only message selects a collaborator for the active task. Model comparisons or incidental mentions alone do not request a model call.
+description: Delegate work to a user-named model through ai-collab, or coordinate an explicitly requested independent review, analysis, or workspace task. A model-only message selects a collaborator for the active task. Model comparisons and incidental mentions do not request a call.
 ---
 
-# Named-model collaboration
+# Lightweight model collaboration
 
-Use the installed `ai-collab` command from any project. The coordinating Codex
-keeps responsibility for implementation, evidence checks and the final answer.
-The user wants a model name to be sufficient routing information: **“opus5.5”**
-means collaborate with that Claude Code model; **“gemini4”** means the configured
-Gemini web model. A model-only message steers the current task. If no task exists,
-ask what the user wants to work on.
+The current coordinating agent owns the final answer, regardless of its harness.
+Use the installed `ai-collab`; model aliases and accounts come from personal configuration.
+If no task exists, ask what the selected collaborator should work on.
 
-## Resolve and prepare
+## Prepare and call
 
-1. Check `command -v ai-collab`, then `ai-collab --json resolve 'opus5.5'`
-   (substitute the user's name). The personal config is authoritative. Do not
-   replace an explicit version with a default or a different provider.
-2. On first use in a session, or after a connection failure, run
-   `ai-collab --json doctor`. This checks configuration and discovery, **not**
-   successful inference. `models --refresh` queries the Gemini proxy catalog
-   and Claude's partial official CLI cache.
-3. Use the active project's instructions and identify a concrete, bounded task:
-   expected output, supplied evidence, constraints and acceptance criteria.
-   A collaboration request authorizes the necessary model calls for that task;
-   do not ask for confirmation again merely because another model is involved.
-4. For Claude Code development/review, prefer `--workspace /absolute/project`
-   to let it inspect the relevant project directly. Use the active task's specific
-   project directory, not the whole personal workspace. Multiple roots may be
-   granted explicitly (at most four). The path must exist on the CLI host.
-   For a specific text bundle, attach relevant UTF-8 files with `--file`. For PDF, Office or remote/local
-   workspace material, first use the existing LabContext readers and supply the
-   needed extracted evidence. Paths alone are not readable by the Gemini model.
-   Preserve source locations/hashes. Keep unrelated private research corpora,
-   credentials and raw datasets out of context bundles.
-
-## Delegate and verify
+- Resolve the requested name with `ai-collab resolve NAME`; preserve its provider and version.
+- Run `ai-collab doctor` on first use or after connection trouble. Configuration health is not a successful model call.
+- Give a concrete objective, necessary material, permitted operations and expected deliverable.
+  Reuse information already supplied; do not repeat approval questions for authorized work.
+- Use one collaborator for a useful subtask. Parallelize only independent work and keep one coordinator.
+- Choose the supported access mode: `text` for supplied content, `read` for workspace inspection,
+  `exec` only for authorized edits or commands in a prepared workspace.
+  A role such as reviewer never grants execution permission.
+- CLI workspaces are real directories on the execution host. API models need explicit file content.
+  Extract PDF/Office material with existing LabContext readers; include source locations.
+- Supply relevant domain requirements, not the complete conversation or every installed skill.
 
 ```bash
-ai-collab --json run --model opus5.5 --role reviewer \
-  --prompt-file /absolute/path/review-task.txt --file /absolute/path/change.diff
-ai-collab --json run --model opus5.5 --role reviewer \
-  --workspace /absolute/project --prompt "Inspect the login flow and identify reproducible defects."
-ai-collab --json run --model gemini4 --role researcher \
-  --prompt-file /absolute/path/research-question.txt --file /absolute/path/evidence.txt
-ai-collab --json wait JOB_ID --timeout 30
-ai-collab --json result JOB_ID
+ai-collab run --model NAME --workspace /project --prompt-file task.txt
+ai-collab run --model NAME --access exec --workspace /prepared-task --prompt-file task.txt
+ai-collab run --model NAME --file selected-evidence.txt --prompt-file task.txt
+ai-collab wait JOB_ID --timeout 30
+ai-collab result JOB_ID
+ai-collab reply JOB_ID --prompt-file followup.txt
 ```
 
-`run` returns a durable job ID. Poll using `wait` or `status`, and keep the user
-informed during long calls. `jobs` lists recent work; `cancel JOB_ID` stops local
-execution. A timeout/cancellation does not prove that the upstream request was
-never processed. There is no automatic retry or provider fallback.
+## Discuss and deliver
 
-Without `--workspace`, both providers receive text context with no file/shell
-tools. With `--workspace`, Claude Code gets only **Read/Glob/Grep**, under native
-`--restricted` directory boundaries and `--safe-mode`; hooks, external MCP,
-shell and write tools remain disabled. Known credential paths are denied.
-The result includes read/search attempts and their reported success/failure,
-plus workspace identity and starting Git revision. This is a live read, not an
-immutable filesystem snapshot. Gemini continues using text through the web proxy.
-Ask collaborators for analysis, concrete patches, checks or counterexamples.
-Codex applies proposed changes and executes tests.
+- For independent review, first provide original evidence without the coordinator's conclusion.
+- Ask about concrete disagreements; supply missing evidence through `reply` when useful.
+  A request for context is advice, not authority to execute a command or read unrelated files.
+- `reply` continues a successful persisted conversation with the same identity and access.
+  `run --after JOB_ID` passes its result text into a new call; it does not clone native context.
+- Background jobs let the coordinator continue other work. Wait at most 60 seconds per call
+  and give progress updates. Inspect `status` before repeating a submission.
+- Read results before adopting them. Distinguish conclusions, artifact locations, performed
+  checks and unresolved questions. Verify according to the task, not a compulsory audit pipeline.
+- Stop when the requested result is useful, further progress needs unavailable input, or the
+  agreed scope is reached. Do not repeatedly ask models to agree.
+- Never silently change model, provider or billing channel. Failed/cancelled jobs do not authorize
+  retries of side effects. A CLI cancellation may leave an independently launched experiment running.
+- Attribute assistance using recorded metadata, noting when identity is only a request binding.
 
-If both models were requested, independent analysis can run concurrently.
-Give each the same relevant evidence before sharing their opinions. Use
-`--after JOB_ID` to include a successful prior result for a focused follow-up.
-Do not replace independent review with repeated requests for agreement.
+## Optional guidance
 
-Read results before accepting them. For development, reproduce reported defects
-and run appropriate tests. For research, connect claims to source passages,
-alternative explanations and experiments; use the existing research skills.
-Report disagreements and unresolved findings. Attribute assistance using the
-recorded provider/model metadata; model self-identification is not verification.
-Never say a collaborator tested code when it only proposed a test.
+Read only what the task needs:
+- [CLI details](references/cli.md): continuation errors, execution boundaries, remote calls, model upgrades.
+- [Independent review](recipes/review.md): a second opinion on an existing artifact.
+- [Plan and execute](recipes/plan-execute.md): analytical advice followed by native execution.
+- [Research discussion](recipes/research.md): evidence, alternatives and missing information.
+- [Writing](recipes/writing.md): drafting and revising from supplied material.
 
-## Model upgrades and failures
-
-Model versions live in `~/.config/ai-collab/config.json`, not this workflow.
-Unknown names fail explicitly. For a newly requested version, discover its actual
-ID from the provider or official documentation, verify CLI compatibility and
-register it with `alias set`. Run a small real task before claiming availability.
-`alias default` changes unversioned `claude`/`gemini` preferences; existing
-versioned names remain fixed unless the user requests replacement.
-
-Use `ai-collab alias --help` for registration, `request --provider gemini-web
---path /models` for the read-only raw endpoint, and `ai-collab --help` for the
-command contract. Failed jobs retain a reason code and private local artifacts.
-Explain an unavailable requested model and continue independent useful work;
-do not silently substitute another model, account or API billing channel.
+For handoff, stop new scheduling by the old coordinator and record the objective, completed work,
+active job IDs, key files and next step. The successor reads jobs and results; native chats are not
+transferred between vendors.

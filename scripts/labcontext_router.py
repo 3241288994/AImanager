@@ -42,7 +42,8 @@ DEFAULT_RECOVERY_STATUS_PATH = Path("~/.local/state/labcontext-router/recovery-s
 DEFAULT_RECOVERY_LOG_PATH = Path("~/.local/state/labcontext-router/recovery.log").expanduser()
 DEFAULT_TUNNEL_HEALTH_URL = "http://127.0.0.1:8080"
 REQUIRED_PROVIDER_TOOLS = {"inspect_path", "list_workspaces"}
-NON_WORKSPACE_TOOLS = {"list_workspaces", "get_job", "inspect_path"}
+COLLAB_TOOLS = {"collab_" + name for name in ("run", "reply", "status", "result", "wait", "cancel", "jobs")}
+NON_WORKSPACE_TOOLS = {"list_workspaces", "get_job", "inspect_path"} | COLLAB_TOOLS
 ADMIN_OPERATIONS: dict[str, tuple[str, str]] = {
     "overview": ("GET", "overview"),
     "setDefaultWorkspace": ("POST", "default-workspace"),
@@ -249,7 +250,9 @@ class UpstreamMcp:
             method="POST",
         )
         try:
-            response = self._opener.open(request, timeout=self.config.timeout_seconds)
+            collaboration_call = payload.get("method") == "tools/call" and payload.get("params", {}).get("name") in COLLAB_TOOLS
+            timeout = max(55, self.config.timeout_seconds) if collaboration_call else self.config.timeout_seconds
+            response = self._opener.open(request, timeout=timeout)
             body = response.read()
             if not body:
                 return dict(response.headers), None
@@ -304,6 +307,9 @@ class UpstreamMcp:
                 _, response = self._request(payload, self._session_id)
             except RouterError as first_error:
                 self._session_id = None
+                if method == "tools/call" and params.get("name") in COLLAB_TOOLS:
+                    # A timed-out submission may already have consumed quota or changed files.
+                    raise first_error
                 try:
                     self._initialize()
                     _, response = self._request(payload, self._session_id)
@@ -708,6 +714,12 @@ class LabContextRouter:
             if isinstance(job_id, str) and job_id and ":" not in job_id:
                 tagged["job_id"] = f"{provider.id}:{job_id}"
                 tagged.setdefault("source", provider.id)
+            if "conversationId" in tagged:
+                for key in ("id", "jobId", "parentJobId", "conversationId"):
+                    ref = tagged.get(key)
+                    if isinstance(ref, str) and ref and ":" not in ref:
+                        tagged[key] = f"{provider.id}:{ref}"
+                tagged.setdefault("source", provider.id)
             return tagged
         if isinstance(value, list):
             return [LabContextRouter._tag_value(item, provider) for item in value]
@@ -786,7 +798,7 @@ class LabContextRouter:
                 raise RouterError("source and workspace_ref refer to different providers")
             source = ref_source
             routed["workspace_id"] = workspace_id
-        if tool == "get_job":
+        if tool == "get_job" or tool in COLLAB_TOOLS:
             job_id = routed.get("job_id")
             if isinstance(job_id, str) and ":" in job_id:
                 job_source, raw_job_id = job_id.split(":", 1)

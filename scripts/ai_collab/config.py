@@ -12,12 +12,24 @@ class CollabError(Exception):
         self.code = code
 
 
+def user_home():
+    return Path(os.environ.get("AI_COLLAB_HOME", str(Path.home()))).resolve()
+
+
+def provider_path(value):
+    """Resolve configured paths against the installer owner, not a harness's isolated HOME."""
+    value = str(value)
+    if value == "~" or value.startswith("~/"):
+        return (user_home() / value[2:]).resolve()
+    return Path(value).expanduser().resolve()
+
+
 def config_path():
-    return Path(os.environ.get("AI_COLLAB_CONFIG", "~/.config/ai-collab/config.json")).expanduser().resolve()
+    return provider_path(os.environ.get("AI_COLLAB_CONFIG", "~/.config/ai-collab/config.json"))
 
 
 def state_path():
-    return Path(os.environ.get("AI_COLLAB_STATE_DIR", "~/.local/state/ai-collab")).expanduser().resolve()
+    return provider_path(os.environ.get("AI_COLLAB_STATE_DIR", "~/.local/state/ai-collab"))
 
 
 def defaults():
@@ -28,6 +40,8 @@ def defaults():
             "managerRoot": "~/.local/state/aimanager",
         },
         "geminiWeb": {"envFile": "~/.config/gemini-web-client/client.env"},
+        "codex": {"binary": "codex", "home": "~/.codex"},
+        "hosts": {},
         "proxy": None,
         "models": {
             "opus5.5": {
@@ -88,7 +102,7 @@ def validate(value):
         if (not isinstance(model, dict) or not isinstance(model.get("aliases", []), list)
                 or not all(isinstance(alias, str) for alias in model.get("aliases", []))):
             raise CollabError("invalid_config", "Invalid model entry or alias list")
-        if model.get("provider") not in {"claude-code", "gemini-web"}:
+        if model.get("provider") not in {"claude-code", "gemini-web", "codex-cli"}:
             raise CollabError("invalid_config", "Unsupported model provider")
         if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.:/\[\]-]{0,159}", model.get("model", "")):
             raise CollabError("invalid_config", "Invalid upstream model ID")
@@ -102,7 +116,7 @@ def validate(value):
             raise CollabError("invalid_config", "Default model references an unknown entry")
         if normalize(alias) in names:
             raise CollabError("ambiguous_alias", "Default alias conflicts with a versioned alias")
-        expected = {"claude": "claude-code", "gemini": "gemini-web"}.get(alias)
+        expected = {"claude": "claude-code", "gemini": "gemini-web", "codex": "codex-cli"}.get(alias)
         if not expected or value["models"][target]["provider"] != expected:
             raise CollabError("provider_mismatch", "Provider defaults must preserve their invocation channel")
     return value

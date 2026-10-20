@@ -23,10 +23,10 @@ def main():
     home.mkdir(parents=True, exist_ok=True)
     inputs = [source / "ai_collab_cli.py", repo / "docs/ai-collaboration.md"]
     inputs += sorted((source / "ai_collab").glob("*.py"))
-    inputs += sorted((repo / "skills/multi-model-collaboration").glob("*"))
+    inputs += sorted(p for p in (repo / "skills/multi-model-collaboration").rglob("*") if p.is_file())
     digest = hashlib.sha256()
     for path in inputs:
-        digest.update(path.name.encode())
+        digest.update(str(path.relative_to(repo)).encode())
         digest.update(path.read_bytes())
     release = home / "versions" / digest.hexdigest()[:16]
     release.parent.mkdir(exist_ok=True)
@@ -48,7 +48,8 @@ def main():
     link = home / (".current-" + str(os.getpid()))
     link.symlink_to(release)
     os.replace(link, home / "current")
-    wrapper = ("#!/usr/bin/env python3\n" + marker + "\nimport runpy, sys\n"
+    wrapper = ("#!/usr/bin/env python3\n" + marker + "\nimport os, runpy, sys\n"
+               + "os.environ.setdefault('AI_COLLAB_HOME', " + repr(str(Path.home())) + ")\n"
                + "sys.path.insert(0, " + repr(str(home / "current")) + ")\n"
                + "runpy.run_path(" + repr(str(home / "current/ai_collab_cli.py")) + ", run_name='__main__')\n")
     staged = executable.with_name(".ai-collab-" + str(os.getpid()))
