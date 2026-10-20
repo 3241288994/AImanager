@@ -54,7 +54,13 @@ def test_runtime_applies_default_workspace_and_tool_policy(tmp_path: Path, monke
     assert state.config().default_workspace_id == "second"
     assert "second" in load_config(state.config().config_path).workspaces
     state.set_policy("fast", ["request_analysis", "get_job"])
+    assert not any(item["name"].startswith("collab_") for item in tools_status(state)["tools"])
+    state.collaboration_available = True
     tools = {item["name"]: item for item in tools_status(state)["tools"]}
+    assert tools["collab_run"]["read_only"] is False
+    assert tools["collab_run"]["compute_cost"] == "model_tokens"
+    assert tools["collab_status"]["read_only"] is True
+    assert tools["collab_status"]["compute_cost"] == "none"
     assert not tools["request_analysis"]["enabled"]
     assert tools["get_job"]["enabled"]
     generated = tmp_path / "second" / ".labcontext" / "context.yaml"

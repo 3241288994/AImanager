@@ -16,6 +16,7 @@ export default defineConfig({
   timeout: 30_000,
   fullyParallel: false,
   use: {
+    launchOptions: process.env.AIMANAGER_TEST_BROWSER ? { executablePath: process.env.AIMANAGER_TEST_BROWSER } : {},
     baseURL: `http://${LOCAL_TEST_HOST}:${PORT}`,
     trace: "on-first-retry",
     video: "retain-on-failure",

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { CheckCircle2, ExternalLink, Loader2, ShieldCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -16,18 +16,21 @@ const DESCRIPTIONS: Record<string, string> = {
   awaiting_code: "在官方页面完成登录，将返回码粘贴到下方。这里不需要账号密码。",
   needs_confirmation: "官方客户端等待确认。继续将选择当前默认选项，不会发送模型问题。",
   verifying: "返回码已交给官方客户端，正在同步登录结果。",
-  reading_usage: "只读取官方 /usage 面板，不提交生成请求。",
+  reading_usage: "只读取官方额度接口或 /usage 面板，不提交生成请求。",
   succeeded: "操作结果已同步，账号与额度页面会自动更新。",
   cancelled: "已停止本次会话，保留已保存的账号授权。",
   expired: "本次授权窗口已过期，请重新点击网页登录。",
 };
 
 export function CliAuthorizationDialog({ auth }: { auth: ReturnType<typeof useManagedCliSession> }) {
+  return <SessionDialog key={`${auth.id}:${auth.session.data?.phase}`} auth={auth} />;
+}
+
+function SessionDialog({ auth }: { auth: ReturnType<typeof useManagedCliSession> }) {
   const [code, setCode] = useState("");
   const value = auth.session.data;
   const phase = value?.phase ?? "starting";
   const link = officialAuthUrl(value?.authorizationUrl ?? null);
-  useEffect(() => { setCode(""); }, [auth.id, phase]);
   return <Dialog open={Boolean(auth.id)} onOpenChange={open => { if (!open) auth.close(); }}>
     <DialogContent className="sm:max-w-lg">
       <DialogHeader>

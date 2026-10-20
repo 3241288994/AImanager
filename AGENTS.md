@@ -1,6 +1,6 @@
 # Repository Engineering Standards
 
-This file applies to the whole CodexManager repository. For work under `apps/`,
+This file applies to the whole AImanager repository. For work under `apps/`,
 also read `apps/AGENTS.md`; that file contains the more specific frontend and
 Tauri rules.
 

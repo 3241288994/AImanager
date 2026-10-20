@@ -38,6 +38,13 @@ PUBLIC_TOOLS = (
     ("compare_experiments", "Server-side experiment comparison", "indexed", ("query_experiments",)),
     ("request_analysis", "Asynchronous Codex synthesis", "codex", ("get_job",)),
     ("get_job", "Analysis progress and result", "instant", ()),
+    ("collab_run", "Submit background collaboration (consumes the selected model's quota)", "instant", ("collab_status", "collab_result")),
+    ("collab_reply", "Continue background collaboration (consumes the selected model's quota)", "instant", ("collab_status", "collab_result")),
+    ("collab_status", "Collaboration progress", "instant", ()),
+    ("collab_result", "Collaboration result", "instant", ()),
+    ("collab_wait", "Collaboration status with up to 30 seconds of waiting", "instant", ()),
+    ("collab_cancel", "Cancel collaboration", "instant", ()),
+    ("collab_jobs", "Collaboration job list", "instant", ()),
 )
 ALWAYS_ENABLED = {"list_workspaces", "get_job"}
 WORKER_MODELS = ("gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna")
@@ -627,8 +634,11 @@ def tools_status(state: RuntimeState) -> dict[str, Any]:
     return {"profile": policy["profile"], "tools": [
         {"name": name, "description": description, "latency_class": latency,
          "dependencies": list(dependencies), "enabled": name not in disabled,
-         "read_only": True, "compute_cost": "codex_tokens" if latency == "codex" else "none"}
+         "read_only": name not in {"collab_run", "collab_reply", "collab_cancel"},
+         "compute_cost": ("model_tokens" if name in {"collab_run", "collab_reply"}
+                          else "codex_tokens" if latency == "codex" else "none")}
         for name, description, latency, dependencies in PUBLIC_TOOLS
+        if not name.startswith("collab_") or getattr(state, "collaboration_available", False)
     ]}
 
 

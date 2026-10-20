@@ -23,7 +23,16 @@ export interface AiConnectionProbe {
   generationVerified: boolean;
   note: string;
 }
+export interface WebPoolQuotaReport {
+  readyAccounts: number | null; checkedAt: number; source: string; note: string;
+  accounts: {
+    index: number; status: string; cooldownSeconds: number | null; tier: string | null;
+    usageUpdatedAt: string | null; stale: boolean; probeFailed: boolean;
+    windows: { label: string; remainingPercent: number | null; remainingCredits: number | null; resetsAt: string | null }[];
+  }[];
+}
 export const aiConnectionsClient = {
+  quota: (id: string) => invoke<WebPoolQuotaReport>("service_ai_connections_quota", withAddr({ id }), { timeoutMs: 15_000, retries: 0 }),
   list: () => invoke<AiConnectionsOverview>("service_ai_connections_list", withAddr()),
   save: (connection: AiConnection) => invoke<{ items: AiConnection[] }>("service_ai_connections_save", withAddr({ connection })),
   remove: (id: string) => invoke<{ items: AiConnection[] }>("service_ai_connections_delete", withAddr({ id })),

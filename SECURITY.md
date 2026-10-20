@@ -2,7 +2,7 @@
 
 ## Supported scope
 
-Please report vulnerabilities in CodexManager itself, especially issues involving account tokens, API/platform keys, RPC tokens, Web authentication, local gateway authorization, LabContext admin access, sensitive logging, or desktop/Web/service privilege boundaries.
+Please report vulnerabilities in AImanager itself, especially issues involving account tokens, API/platform keys, RPC tokens, Web authentication, local gateway authorization, LabContext admin access, sensitive logging, or desktop/Web/service privilege boundaries.
 
 ## Reporting a vulnerability
 

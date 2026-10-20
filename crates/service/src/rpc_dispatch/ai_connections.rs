@@ -14,6 +14,9 @@ pub(super) fn try_handle(req: &JsonRpcRequest) -> Option<JsonRpcResponse> {
         "aiConnections/delete" => {
             crate::ai_connections::delete(super::str_param(req, "id").unwrap_or(""))
         }
+        "aiConnections/quota" => {
+            crate::ai_connections::quota(super::str_param(req, "id").unwrap_or(""))
+        }
         "aiConnections/probe" => {
             crate::ai_connections::probe(super::str_param(req, "id").unwrap_or(""))
         }

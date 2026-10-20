@@ -6,6 +6,7 @@ macro_rules! invoke_handler {
             crate::commands::ai_connections::service_ai_connections_save,
             crate::commands::ai_connections::service_ai_connections_delete,
             crate::commands::ai_connections::service_ai_connections_probe,
+            crate::commands::ai_connections::service_ai_connections_quota,
             // service
             crate::commands::usage_analytics::service_usage_analytics_read,
             crate::commands::usage_analytics::service_usage_analytics_refresh,

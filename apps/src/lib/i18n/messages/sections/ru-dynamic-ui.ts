@@ -26,8 +26,8 @@ export const RU_DYNAMIC_UI_MESSAGES: MessageCatalog = {
     "Текущая среда не поддерживает копирование. Скопируйте вручную.",
   当前环境不支持浏览器文件选择:
     "Текущая среда не поддерживает выбор файлов в браузере.",
-  "当前页面缺少 CodexManager Web 运行壳，无法访问管理 RPC。请通过 codexmanager-web 打开，或在反向代理中转发 /api/rpc。":
-    "На странице отсутствует Web-оболочка CodexManager, поэтому management RPC недоступен. Откройте через codexmanager-web или проксируйте /api/rpc в reverse proxy.",
+  "当前页面缺少 AImanager Web 运行壳，无法访问管理 RPC。请通过 codexmanager-web 打开，或在反向代理中转发 /api/rpc。":
+    "На странице отсутствует Web-оболочка AImanager, поэтому management RPC недоступен. Откройте через codexmanager-web или проксируйте /api/rpc в reverse proxy.",
   导出模型目录: "Экспортировать каталог моделей",
   地址不合法: "Недопустимый адрес",
   地址解析失败: "Не удалось разобрать адрес",

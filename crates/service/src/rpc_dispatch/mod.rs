@@ -234,6 +234,7 @@ mod ai_connection_access_tests {
             "aiConnections/save",
             "aiConnections/delete",
             "aiConnections/probe",
+            "aiConnections/quota",
         ] {
             assert!(!super::member_method_allowed(method));
             let member = crate::RpcActor::from_parts(Some("member"), Some("test-member"));

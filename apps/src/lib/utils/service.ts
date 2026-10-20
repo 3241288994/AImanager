@@ -162,17 +162,17 @@ export function formatServiceError(error: unknown): string {
     return "服务返回空响应（可能启动未完成、已异常退出或端口被占用）";
   }
   if (lower.includes("port is in use") || lower.includes("unexpected service responded")) {
-    return `端口已被占用或响应来源不是 CodexManager 服务（${LOOPBACK_PROXY_HINT}）`;
+    return `端口已被占用或响应来源不是 AImanager 服务（${LOOPBACK_PROXY_HINT}）`;
   }
   if (lower.includes("missing user_agent") || lower.includes("missing useragent")) {
-    return `响应缺少服务标识（疑似非 CodexManager 服务，${LOOPBACK_PROXY_HINT}）`;
+    return `响应缺少服务标识（疑似非 AImanager 服务，${LOOPBACK_PROXY_HINT}）`;
   }
   if (
     lower.includes("unexpected rpc response") ||
     lower.includes("expected value at line 1 column 1") ||
     lower.includes("invalid chunked body")
   ) {
-    return `响应格式异常（疑似非 CodexManager 服务，${LOOPBACK_PROXY_HINT}）`;
+    return `响应格式异常（疑似非 AImanager 服务，${LOOPBACK_PROXY_HINT}）`;
   }
   if (lower.includes("no address resolved")) return "地址解析失败";
   if (lower.includes("addr is empty")) return "地址为空";

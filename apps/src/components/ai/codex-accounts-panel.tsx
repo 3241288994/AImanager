@@ -1,5 +1,7 @@
 "use client";
 
+import { activeFirst } from "@/lib/account-order";
+
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AlertTriangle, CheckCircle2, Clock3, ExternalLink, Loader2, Plus, RefreshCw, ShieldCheck, UserRound } from "lucide-react";
@@ -67,7 +69,7 @@ function UsageMeter({ label, remain, resetsAt }: { label: string; remain: number
         <span className="tabular-nums text-muted-foreground">{value == null ? "未提供" : `${Math.round(value)}%`}</span>
       </div>
       <div className="h-2 overflow-hidden rounded-full bg-muted">
-        <div className="h-full rounded-full bg-primary transition-[width]" style={{ width: `${value ?? 0}%` }} />
+        <div className="h-full rounded-full bg-emerald-400 transition-[width]" style={{ width: `${value ?? 0}%` }} />
       </div>
       <p className="text-xs text-muted-foreground">{formatReset(resetsAt)}</p>
     </div>
@@ -180,7 +182,8 @@ function AddAccountDialog({ open, onOpenChange, onCompleted }: { open: boolean; 
   );
 }
 
-export function CodexAccountsPanel() {
+export function CodexAccountsPanel({ view = "usage" }: { view?: "connections" | "usage" }) {
+  const managing = view === "connections";
   const queryClient = useQueryClient();
   const [addAccountOpen, setAddAccountOpen] = useState(false);
   const accountsQuery = useQuery({ queryKey: ["personal", "accounts"], queryFn: accountClient.list, refetchInterval: 60_000, refetchIntervalInBackground: false });
@@ -205,13 +208,14 @@ export function CodexAccountsPanel() {
     () => attachUsagesToAccounts(accountsQuery.data?.items || [], usageQuery.data || []),
     [accountsQuery.data, usageQuery.data],
   );
+  const sortedAccounts = activeFirst(accounts, account => Boolean(profileQuery.data?.identityConsistent && account.id === profileQuery.data?.selectedAccountId));
   const active = accounts.find((account) => account.id === profileQuery.data?.selectedAccountId) || null;
   const activeSnapshotStale = snapshotIsStale(active?.lastRefreshAt ?? null);
 
   const refreshMutation = useMutation({
-    mutationFn: () => {
-      if (!active?.id) throw new Error("当前生效账号尚未识别");
-      return accountClient.refreshUsage(active.id);
+    mutationFn: (id?: string) => {
+      if (!id && !active?.id) throw new Error("当前生效账号尚未识别");
+      return accountClient.refreshUsage(id || active!.id);
     },
     onSuccess: async (result) => {
       await queryClient.invalidateQueries({ queryKey: ["personal"] });
@@ -238,32 +242,33 @@ export function CodexAccountsPanel() {
       <header className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <h2 className="text-lg font-semibold tracking-tight">Codex 账号</h2>
-          <p className="mt-1 text-xs text-muted-foreground">实际生效身份、订阅信号与官方额度快照。</p>
+          <p className="mt-1 text-xs text-muted-foreground">{managing ? "管理官方授权和默认身份；切换仅影响新启动的 Codex。" : "当前使用账号置顶，独立展示每个账号的额度窗口与重置时间。"}</p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <Badge variant="outline"><RefreshCw />{autoRefreshQuery.data?.usagePollingEnabled ? `全部账号每 ${formatPollingInterval(autoRefreshQuery.data.usagePollIntervalSecs)}自动刷新` : "自动刷新未启用"}</Badge>
-          <Button size="sm" variant="outline" onClick={() => setAddAccountOpen(true)}><Plus />添加账号</Button>
-          <Button size="sm" variant="outline" onClick={() => refreshMutation.mutate()} disabled={refreshMutation.isPending || !active}>
+          {!managing ? <Badge variant="outline"><RefreshCw />{autoRefreshQuery.data?.usagePollingEnabled ? `全部账号每 ${formatPollingInterval(autoRefreshQuery.data.usagePollIntervalSecs)}自动刷新` : "自动刷新未启用"}</Badge> : null}
+          {managing ? <Button size="sm" variant="outline" onClick={() => setAddAccountOpen(true)}><Plus />添加 Codex 账号</Button> : null}
+          {!managing ? <Button size="sm" variant="outline" onClick={() => refreshMutation.mutate(undefined)} disabled={refreshMutation.isPending || !active}>
             <RefreshCw className={refreshMutation.isPending ? "animate-spin" : ""} />刷新当前额度
-          </Button>
+          </Button> : null}
         </div>
       </header>
 
-      {profileQuery.data && !profileQuery.data.identityConsistent ? (
+      {[accountsQuery.error, usageQuery.error, profileQuery.error].filter(Boolean).map((error, i) => <p role="alert" key={i} className="rounded-xl border border-destructive/20 bg-destructive/5 p-4 text-sm text-destructive">{getAppErrorMessage(error)}</p>)}
+      {managing && profileQuery.data && !profileQuery.data.identityConsistent ? (
         <div className="flex gap-3 rounded-xl border border-amber-500/30 bg-amber-500/10 p-4 text-sm">
           <AlertTriangle className="mt-0.5 size-4 shrink-0 text-amber-600" />
           <div><p className="font-medium">账号身份状态不一致</p><p className="mt-1 text-muted-foreground">auth.json 实际账号与 AImanager 记录不一致。切换前请先确认当前运行中的 Codex 任务。</p></div>
         </div>
       ) : null}
 
-      {activeSnapshotStale && active?.usage ? (
+      {!managing && activeSnapshotStale && active?.usage ? (
         <div className="flex gap-3 rounded-xl border border-amber-500/30 bg-amber-500/10 p-4 text-sm">
           <AlertTriangle className="mt-0.5 size-4 shrink-0 text-amber-600" />
           <div><p className="font-medium">当前额度快照可能已经过期</p><p className="mt-1 text-muted-foreground">快照于 {formatFreshness(active.lastRefreshAt)}生成。点击“刷新当前额度”后才应作为最新额度使用。</p></div>
         </div>
       ) : null}
 
-      <Card className="glass-card rounded-2xl border-primary/25 bg-primary/[0.04]">
+      {managing ? <Card className="glass-card rounded-2xl border-primary/25 bg-primary/[0.04]">
         <CardHeader>
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
@@ -277,7 +282,7 @@ export function CodexAccountsPanel() {
           </div>
         </CardHeader>
         <CardContent className="grid gap-5 md:grid-cols-2">
-          <UsageWindows usage={active?.usage} />
+          <p className="text-sm text-muted-foreground">已连接的账号可在下方设为默认。额度详情请前往“账号与额度”。</p>
           <div className="flex flex-wrap gap-x-6 gap-y-2 text-xs text-muted-foreground md:col-span-2">
             <span className="inline-flex items-center gap-1"><Clock3 className="size-3.5" />{formatFreshness(active?.lastRefreshAt ?? null)}</span>
             <span>Profile：{profileQuery.data?.codexHome || "-"}</span>
@@ -285,42 +290,42 @@ export function CodexAccountsPanel() {
             {active?.hasSubscription ? <><span>套餐到期：{formatSubscriptionDate(active.subscriptionExpiresAt)}</span><span>下次续订：{formatSubscriptionDate(active.subscriptionRenewsAt)}</span></> : <span>未检测到付费套餐</span>}
           </div>
         </CardContent>
-      </Card>
+      </Card> : null}
 
       <section className="space-y-3">
-        <div className="flex items-center justify-between"><h2 className="text-lg font-semibold">可用账号</h2><span className="text-sm text-muted-foreground">{accounts.length} 个</span></div>
+        <div className="flex items-center justify-between"><h2 className="text-base font-semibold">{managing ? "已接入账号" : "账号额度"}</h2><span className="text-sm text-muted-foreground">{accounts.length} 个</span></div>
         <div className="grid gap-3 lg:grid-cols-2">
-          {accounts.map((account) => {
+          {sortedAccounts.map((account) => {
             const plan = normalizedPlan(account);
-            const isActive = account.id === profileQuery.data?.selectedAccountId;
+            const isActive = Boolean(profileQuery.data?.identityConsistent && account.id === profileQuery.data?.selectedAccountId);
             const canSwitch = account.status === "active" && account.hasToken;
             return (
-              <Card key={account.id} className={`glass-card rounded-2xl ${isActive ? "border-primary/45" : "border-border/70"}`}>
+              <Card key={account.id} data-testid="codex-quota-card" data-active-account={isActive} style={isActive ? { borderColor: "#4dbb9c" } : undefined} className={`glass-card rounded-2xl ${isActive ? "border-emerald-500/50 ring-1 ring-emerald-500/15 bg-emerald-500/[0.045]" : "border-border/70"}`}>
                 <CardContent className="grid gap-4 p-5">
                   <div className="flex items-start justify-between gap-3">
                     <div className="flex min-w-0 gap-3"><div className="flex size-10 shrink-0 items-center justify-center rounded-full bg-muted"><UserRound className="size-5" /></div><div className="min-w-0"><p className="truncate font-semibold" title={account.name}>{account.name}</p><p className="mt-1 text-xs text-muted-foreground">{formatFreshness(account.lastRefreshAt)}</p></div></div>
-                    <div className="flex gap-2"><Badge variant={plan.conflict ? "outline" : "secondary"}>{plan.label}</Badge>{isActive ? <Badge>当前</Badge> : null}</div>
+                    <div className="flex gap-2"><Badge variant={plan.conflict ? "outline" : "secondary"}>{plan.label}</Badge>{isActive ? <Badge className="bg-emerald-600 text-white"><CheckCircle2 className="size-3" />当前使用</Badge> : null}</div>
                   </div>
-                  <div className="grid gap-4 sm:grid-cols-2"><UsageWindows usage={account.usage} /></div>
+                  {!managing ? <div className="grid gap-4 sm:grid-cols-2"><UsageWindows usage={account.usage} /></div> : null}
                   {plan.conflict ? <p className="text-xs text-amber-600">套餐来源冲突：effective={account.planType || "未知"}，subscription={account.subscriptionPlan || "未知"}，暂不自动判定。</p> : null}
                   <div className="flex flex-wrap gap-x-5 gap-y-1 text-xs text-muted-foreground">{account.hasSubscription ? <><span>套餐到期：{formatSubscriptionDate(account.subscriptionExpiresAt)}</span><span>下次续订：{formatSubscriptionDate(account.subscriptionRenewsAt)}</span></> : <span>未检测到付费套餐</span>}</div>
-                  <div className="flex items-center justify-between gap-3 border-t pt-3">
+                  {managing ? <div className="flex items-center justify-between gap-3 border-t pt-3">
                     <span className="text-xs text-muted-foreground">状态：{account.status} · {account.hasToken ? "凭证可用" : "缺少凭证"}</span>
                     <Button size="sm" onClick={() => switchMutation.mutate(account.id)} disabled={isActive || !canSwitch || switchMutation.isPending}>
                       <ShieldCheck />{isActive ? "正在使用" : "切换到此账号"}
                     </Button>
-                  </div>
+                  </div> : <Button size="sm" variant="outline" disabled={refreshMutation.isPending || !account.hasToken} onClick={() => refreshMutation.mutate(account.id)}><RefreshCw className="size-3.5" />刷新此账号额度</Button>}
                 </CardContent>
               </Card>
             );
           })}
         </div>
       </section>
-      <AddAccountDialog
+      {managing ? <AddAccountDialog
         open={addAccountOpen}
         onOpenChange={setAddAccountOpen}
         onCompleted={async () => { await queryClient.invalidateQueries({ queryKey: ["personal"] }); }}
-      />
+      /> : null}
     </div>
   );
 }

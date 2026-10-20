@@ -9,8 +9,20 @@ use std::{
 
 const WORKER: &str = include_str!("worker.py");
 const ACTIONS: &[&str] = &[
-    "list", "sync", "connect", "create", "select", "login", "usage", "check", "session", "input",
+    "list",
+    "sync",
+    "connect",
+    "create",
+    "select",
+    "login",
+    "usage",
+    "check",
+    "session",
+    "input",
     "cancel",
+    "models",
+    "analytics",
+    "sessionCatalog",
 ];
 
 fn state_root() -> Result<PathBuf, String> {
@@ -43,26 +55,33 @@ fn install_worker(root: &std::path::Path) -> Result<PathBuf, String> {
             .map_err(|_| "Cannot secure CLI state directory")?;
     }
     let script = root.join("worker.py");
-    // Install an embedded, reviewed worker, never a user-supplied script path.
-    if std::fs::read_to_string(&script).ok().as_deref() != Some(WORKER) {
-        let temporary = root.join(format!(
-            ".worker-{}-{}.tmp",
-            std::process::id(),
-            rand::random::<u64>()
-        ));
-        let mut options = std::fs::OpenOptions::new();
-        options.write(true).create_new(true);
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::OpenOptionsExt;
-            options.mode(0o700);
+    for (filename, content) in [
+        ("usage_history.py", include_str!("usage_history.py")),
+        ("session_history.py", include_str!("session_history.py")),
+        ("worker.py", WORKER),
+    ] {
+        let script = root.join(filename);
+        // Install an embedded, reviewed worker, never a user-supplied script path.
+        if std::fs::read_to_string(&script).ok().as_deref() != Some(content) {
+            let temporary = root.join(format!(
+                ".worker-{}-{}.tmp",
+                std::process::id(),
+                rand::random::<u64>()
+            ));
+            let mut options = std::fs::OpenOptions::new();
+            options.write(true).create_new(true);
+            #[cfg(unix)]
+            {
+                use std::os::unix::fs::OpenOptionsExt;
+                options.mode(0o700);
+            }
+            let mut file = options
+                .open(&temporary)
+                .map_err(|_| "Cannot install CLI worker")?;
+            file.write_all(content.as_bytes())
+                .map_err(|_| "Cannot write CLI worker")?;
+            std::fs::rename(&temporary, &script).map_err(|_| "Cannot activate CLI worker")?;
         }
-        let mut file = options
-            .open(&temporary)
-            .map_err(|_| "Cannot install CLI worker")?;
-        file.write_all(WORKER.as_bytes())
-            .map_err(|_| "Cannot write CLI worker")?;
-        std::fs::rename(&temporary, &script).map_err(|_| "Cannot activate CLI worker")?;
     }
     Ok(script)
 }

@@ -56,8 +56,8 @@ export const KO_ACCOUNT_MANAGER_MESSAGES: MessageCatalog = {
   编辑: "편집",
   编辑登录账号: "로그인 계정 편집",
   角色: "역할",
-  "请通过 CodexManager Web 运行壳访问账号管理。":
-    "CodexManager Web 런타임 셸을 통해 계정 관리에 접근하세요.",
+  "请通过 AImanager Web 运行壳访问账号管理。":
+    "AImanager Web 런타임 셸을 통해 계정 관리에 접근하세요.",
   请输入初始密码: "초기 비밀번호를 입력하세요",
   请输入用户名: "사용자 이름을 입력하세요",
   请选择可分发成员: "한도 분배 대상 멤버를 선택하세요",

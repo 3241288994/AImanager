@@ -48,7 +48,7 @@ export function useManagedCliSession() {
     if (session.data && FINAL_AUTH_PHASES.has(session.data.phase)) {
       void client.invalidateQueries({ queryKey: ["ai-accounts"] });
     }
-  }, [session.data?.phase, client]);
+  }, [session.data, client]);
   async function run(operation: () => Promise<unknown>) {
     setBusy(true);
     try { await operation(); await client.invalidateQueries({ queryKey: ["ai-accounts"] }); }

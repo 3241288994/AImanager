@@ -49,7 +49,7 @@ fn confirm_discard_unsaved_settings(action_label: &str) -> bool {
 
     matches!(
         MessageDialog::new()
-            .set_title("CodexManager")
+            .set_title("AImanager")
             .set_description(&message)
             .set_level(MessageLevel::Warning)
             .set_buttons(MessageButtons::YesNo)

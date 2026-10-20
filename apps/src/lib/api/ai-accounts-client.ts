@@ -1,3 +1,4 @@
+import type { AnalyticsDay } from "./usage-analytics-client";
 import { invoke, withAddr } from "./transport";
 
 export type AiProvider = "claude" | "antigravity";
@@ -10,7 +11,7 @@ export interface ManagedAiAccount {
   authMethod?: string;
   authNote?: string;
   checkedAt?: number;
-  quota: { state: "unknown" | "available" | "unavailable"; source?: string; checkedAt?: number; note?: string;
+  quota: { lastError?: string; lastAttemptAt?: number; reasonCode?: string; state: "unknown" | "available" | "unavailable"; source?: string; checkedAt?: number; note?: string;
     windows: { label: string; usedPercent: number; remainingPercent: number; resetsAt: string | null }[] };
 }
 export interface AiAccountList {
@@ -42,7 +43,23 @@ export function officialAuthUrl(value: string | null): string | null {
 function action<T>(params: Record<string, unknown>): Promise<T> {
   return invoke<T>("service_ai_accounts_action", withAddr({ params }), { timeoutMs: 30_000 });
 }
+export interface CliAnalyticsReport {
+  accountId: string; provider: AiProvider; source: string; startDate: string; endDate: string;
+  days: AnalyticsDay[]; checkedAt: number; note: string;
+  coverage: { filesScanned: number; partial: boolean };
+  quotaHistory: { capturedAt: number; windows: { label: string; remainingPercent: number; resetsAt: string | null }[] }[];
+}
+export interface CliSessionItem {
+  id: string; title: string; cwd: string | null; updatedAtMs: number; source: string;
+  cwdExists: boolean; visibility: "ready" | "missing_workspace" | "unknown_workspace"; resumeCommand: string;
+}
+export interface CliSessionCatalog {
+  accountId: string; provider: AiProvider; items: CliSessionItem[]; total: number;
+  coverage: { filesScanned: number; partial: boolean }; checkedAt: number; continueCommand: string; note: string;
+}
 export const aiAccountsClient = {
+  sessions: (accountId: string, query = "", limit = 100) => action<CliSessionCatalog>({ action: "sessionCatalog", accountId, query, limit }),
+  analytics: (accountId: string, startDate: string, endDate: string) => action<CliAnalyticsReport>({ action: "analytics", accountId, startDate, endDate }),
   list: () => action<AiAccountList>({ action: "list" }),
   sync: (force = false) => action<AiAccountList>({ action: "sync", force }),
   connect: (provider: AiProvider) => action<AiAuthSession>({ action: "connect", provider }),

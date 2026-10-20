@@ -6,7 +6,7 @@
 `http://127.0.0.1:48761/v1` 配置为 Codex CLI 的 `base_url`，也不要将管理 RPC、账号 token、
 `codexmanager.rpc-token` 或 LabContext admin token 当作 API Key。
 
-请继续使用 Codex CLI 的官方登录与配置方式；CodexManager 负责在服务器上管理已获授权的
+请继续使用 Codex CLI 的官方登录与配置方式；AImanager 负责在服务器上管理已获授权的
 账号、额度信号、会话恢复和 LabContext 工作区。若要让 ChatGPT 网页使用服务器科研工具，请按
 [Tunnel 与插件教程](03-openai-plugin-and-tunnel.md)部署独立、受审计的 MCP 适配层。
 

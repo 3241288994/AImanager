@@ -45,7 +45,7 @@ export function LocationSwitcher({
               className="h-8"
               disabled={disabled}
               aria-pressed={location === option.value}
-              title={disabled ? "本地工作区只能在 CodexManager 桌面版中管理" : option.description}
+              title={disabled ? "本地工作区只能在 AImanager 桌面版中管理" : option.description}
               onClick={() => onChange(option.value)}
             >
               <Icon className="size-3.5" />

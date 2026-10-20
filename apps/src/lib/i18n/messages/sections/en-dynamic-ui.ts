@@ -26,8 +26,8 @@ export const EN_DYNAMIC_UI_MESSAGES: MessageCatalog = {
     "Copy is not supported in the current environment. Please copy manually.",
   当前环境不支持浏览器文件选择:
     "The current environment does not support browser file selection.",
-  "当前页面缺少 CodexManager Web 运行壳，无法访问管理 RPC。请通过 codexmanager-web 打开，或在反向代理中转发 /api/rpc。":
-    "This page is missing the CodexManager Web runtime shell and cannot access management RPC. Open it through codexmanager-web, or proxy /api/rpc in your reverse proxy.",
+  "当前页面缺少 AImanager Web 运行壳，无法访问管理 RPC。请通过 codexmanager-web 打开，或在反向代理中转发 /api/rpc。":
+    "This page is missing the AImanager Web runtime shell and cannot access management RPC. Open it through codexmanager-web, or proxy /api/rpc in your reverse proxy.",
   导出模型目录: "Export model catalog",
   地址不合法: "Invalid address",
   地址解析失败: "Failed to parse address",

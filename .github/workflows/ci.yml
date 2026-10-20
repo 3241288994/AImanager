@@ -58,7 +58,8 @@ jobs:
       - name: Validate desktop manifest
         run: cargo metadata --manifest-path apps/src-tauri/Cargo.toml --locked --no-deps --format-version 1 >/dev/null
       - name: Run Tauri command and updater tests
-        run: cargo test --manifest-path apps/src-tauri/Cargo.toml --locked --lib
+        # Home-directory selection tests modify process-wide environment variables.
+        run: cargo test --manifest-path apps/src-tauri/Cargo.toml --locked --lib -- --test-threads=1
 
   labcontext-provider:
     runs-on: ubuntu-24.04

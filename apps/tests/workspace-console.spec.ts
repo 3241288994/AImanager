@@ -165,7 +165,7 @@ async function mockConsoleApi(
         status: "ready",
         adminStatus: "ready",
         serverName: "LabContext",
-        serverVersion: "0.7.0",
+        serverVersion: "0.9.0",
         minimumVersion: "0.7.0",
         protocolVersion: "2025-06-18",
         toolCount: 12,
@@ -228,14 +228,15 @@ async function mockConsoleApi(
     const body = JSON.parse(request.postData() || "{}");
     methods.push(body.method);
     const responses: Record<string, unknown> = {
-      "aiAccounts/action": { items: [], summary: { accounts: 0, authenticated: 0, quotaKnown: 0 } },
-      "aiConnections/list": {
-        host: "linux",
-        cli: [{ id: "claude", name: "Claude Code", installed: true, command: "claude auth login", authStatus: "not_checked" }, { id: "antigravity", name: "Antigravity", installed: false, command: "agy", authStatus: "not_checked" }],
-        items: [{ id: "gemini-web", name: "Gemini 网页账号池", baseUrl: "http://127.0.0.1:16969/v1", credentialSource: "gemini-web-client", enabled: true }],
-      },
       "aiConnections/probe": { id: "gemini-web", status: "reachable", latencyMs: 12, models: ["gemini-argon", "gemini-flash-lite"], health: "reachable", healthSummary: { readyAccounts: 1, accounts: [{ index: 1, status: "ready", cooldownSeconds: 0 }, { index: 2, status: "cooldown", cooldownSeconds: 90 }] }, generationVerified: false, note: "未发送生成请求，不消耗模型额度。" },
       "appSettings/get": settings,
+      "aiAccounts/action": { items: [
+        { id: "claude-a", provider: "claude", label: "Claude personal", active: true, authStatus: "authenticated", quota: {state: "available", source: "official_oauth_usage", checkedAt: 1792491282, windows: [{label: "5 小时额度", remainingPercent: 82, usedPercent: 18, resetsAt: null}]}, models: { state: "available", items: [{id:"claude-example",name:"Example model"}], source: "official_cli_cache" } },
+        { id: "agy-a", provider: "antigravity", label: "Antigravity personal", active: true, authStatus: "authenticated", quota: {state: "unavailable", windows: [], note: "需要完成首次设置"} },
+      ], summary: {accounts:2,authenticated:2,quotaKnown:1} },
+      "aiConnections/list": {items:[{id:"gemini-web",name:"Gemini 网页账号池",baseUrl:"http://127.0.0.1:16969/v1",credentialSource:"gemini-web-client",enabled:true}],host:"test-host",cli:[]},
+      "aiConnections/quota": {readyAccounts:2,checkedAt:Math.floor(Date.now()/1000),note:"自动轮转",accounts:[{index:1,status:"available",tier:"PRO",stale:false,probeFailed:false,usageUpdatedAt:new Date().toISOString(),windows:[{label:"5 小时额度",remainingPercent:82,remainingCredits:1960,resetsAt:null},{label:"每周额度",remainingPercent:null,remainingCredits:null,resetsAt:null}]}]},
+      "apikey/modelCatalogList": {items:[{slug:"gpt-example",displayName:"GPT example",sourceKind:"remote"}]},
       initialize: {
         userAgent: "codex_cli_rs/0.1.0",
         codexHome: "/tmp/codex",
@@ -243,7 +244,7 @@ async function mockConsoleApi(
         platformOs: "linux",
       },
       "account/list": {
-        items: [{
+        items: [{id: "account-2",label: "Backup account",status:"active",hasToken:true,planType:"plus"}, {
           id: "account-1",
           label: "Research account",
           status: "active",
@@ -258,8 +259,8 @@ async function mockConsoleApi(
           availabilityStatus: "available",
           usedPercent: 12,
           windowMinutes: 300,
-          resetsAt: 1_800_000_000,
-          capturedAt: 1_788_000_000,
+          resetsAt: Math.floor(Date.now() / 1000) + 7_200,
+          capturedAt: Math.floor(Date.now() / 1000),
         }],
       },
       "account/usage/pollingStatus": {
@@ -342,7 +343,17 @@ async function mockConsoleApi(
       "labcontext/overview": labContextOverview,
       "labcontext/getResearchMap": researchMapBundle,
     };
-    const result = responses[body.method] ?? {};
+    const result = body.method === "aiAccounts/action" && body.params?.action === "sessionCatalog" ? {
+      accountId: body.params.accountId, provider: body.params.accountId === "claude-a" ? "claude" : "antigravity",
+      total: body.params.accountId === "claude-a" && !body.params.query ? 1 : 0,
+      items: body.params.accountId === "claude-a" && !body.params.query ? [{ id:"12345678-1234-4321-abcd-123456789abc",title:"Claude session demo",cwd:"/workspace/demo",updatedAtMs:1792491282000,source:"claude_jsonl",cwdExists:true,visibility:"ready",resumeCommand:"aimanager-cli claude --account-id claude-a -- --resume 12345678-1234-4321-abcd-123456789abc" }] : [],
+      coverage:{filesScanned:1,partial:false}, checkedAt:1792491282, continueCommand:`aimanager-cli ${body.params.accountId === "claude-a" ? "claude" : "antigravity"} --account-id ${body.params.accountId} -- --continue`,note:"本地账号会话索引"
+    } : body.method === "aiAccounts/action" && body.params?.action === "analytics" ? {
+      accountId:body.params.accountId, provider:body.params.accountId === "claude-a" ? "claude" : "antigravity",
+      days:body.params.accountId === "claude-a" ? [{date:body.params.startDate,capturedAt:Math.floor(Date.now()/1000),totals:{credits:null,turns:3,uncachedInputTokens:100,cachedInputTokens:50,outputTokens:20,totalTokens:170}}] : [],
+      quotaHistory:[{capturedAt:Math.floor(Date.now()/1000),windows:[{label:"5 小时额度",remainingPercent:82,resetsAt:null}]}],
+      coverage:{filesScanned:1,partial:false}, checkedAt:Math.floor(Date.now()/1000),note:"各平台来源独立"
+    } : responses[body.method] ?? {};
     await route.fulfill({
       contentType: "application/json; charset=utf-8",
       body: JSON.stringify({ jsonrpc: "2.0", id: body.id ?? 1, result }),
@@ -371,7 +382,7 @@ test("managed CLI accounts complete browser handoff, selection and official quot
     else result = auth;
     await route.fulfill({ contentType: "application/json", body: JSON.stringify({ jsonrpc: "2.0", id: body.id, result }) });
   });
-  await page.goto("/#claude");
+  await page.goto("/connections/#claude");
   await page.getByRole("button", { name: "登录 Claude Code", exact: true }).click();
   await expect(page.getByRole("link", { name: "打开官方授权页面" })).toHaveAttribute("href", /https:\/\/claude\.com\/cai\/oauth\/authorize\?code=true/);
   await page.getByLabel("官方授权返回码", { exact: true }).fill("dummy-return-code");
@@ -382,6 +393,7 @@ test("managed CLI accounts complete browser handoff, selection and official quot
   await expect(page.getByText("已登录", { exact: true })).toBeVisible();
   await page.getByRole("button", { name: "设为默认", exact: true }).click();
   await expect(page.getByRole("button", { name: "当前默认", exact: true })).toBeVisible();
+  await page.goto("/#claude");
   await page.getByRole("button", { name: "刷新官方额度", exact: true }).click();
   await expect(page.getByText("已完成同步", { exact: true })).toBeVisible();
   await page.getByRole("button", { name: "关闭结果", exact: true }).click();
@@ -393,12 +405,13 @@ test("AI connection center distinguishes CLI installation from auth and probes p
   await page.goto("/connections/");
   await expect(page).toHaveTitle("AImanager");
   await expect(page.getByText("AI 接入中心", { exact: true })).toBeVisible();
+  await page.getByRole("tab", { name: /Claude Code/ }).click();
   await expect(page.locator('[data-slot="card-title"]').filter({ hasText: "Claude Code" })).toBeVisible();
   await expect(page.getByText("登录状态：尚未验证")).toHaveCount(0);
   await expect(page.getByLabel("账号备注", { exact: true })).toHaveCount(0);
   await expect(page.getByRole("button", { name: "添加独立账号", exact: true })).toHaveCount(0);
-  await page.getByRole("button", { name: "检测连接与模型" }).click();
-  await expect(page.getByText("gemini-argon", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "检测连接", exact: true }).click();
+  await expect(page.getByText("gemini-argon", { exact: true })).toHaveCount(0);
   await expect(page.getByText("未发送生成请求，不消耗模型额度。", { exact: true })).toBeVisible();
   await expect(page.getByText("上游报告可用账号：1", { exact: true })).toBeVisible();
   await expect(page.getByText("账号 2 · 冷却中 · 冷却 90s", { exact: true })).toBeVisible();
@@ -423,13 +436,15 @@ test("saved logins synchronize across connection and account views without recre
     }));
     await route.fulfill({ contentType: "application/json", body: JSON.stringify({ jsonrpc: "2.0", id: body.id, result: { items, summary: { accounts: 2, authenticated: signedIn ? 2 : 0, quotaKnown: 0 } } }) });
   });
-  await page.goto("/connections/");
-  await expect(page.getByText("待同步", { exact: true })).toHaveCount(2);
+  await page.goto("/connections/#claude");
+  await expect(page.getByText("待同步", { exact: true })).toHaveCount(1);
   signedIn = true;
-  await page.getByRole("button", { name: "同步登录状态", exact: true }).click();
-  await expect(page.getByText("已登录", { exact: true })).toHaveCount(2);
+  await page.getByRole("button", { name: "刷新", exact: true }).click();
+  await expect(page.getByText("已登录", { exact: true })).toHaveCount(1);
+  await page.getByRole("tab", { name: /Antigravity/ }).click();
+  await expect(page.getByText("已登录", { exact: true })).toHaveCount(1);
   await expect(page.getByLabel("账号备注", { exact: true })).toHaveCount(0);
-  await page.getByRole("link", { name: "管理 Codex 账号与所有平台额度" }).click();
+  await page.getByRole("link", { name: "查看账号额度", exact: true }).click();
   await page.getByRole("tab", { name: /Claude Code/ }).click();
   await expect(page.getByText("Claude 个人会员", { exact: true })).toBeVisible();
   await expect(page.getByText("额度尚未同步", { exact: true })).toBeVisible();
@@ -454,7 +469,7 @@ test("the maintained account, analytics, session, and LabContext routes load thr
   await expect(page.getByText("服务已连接", { exact: true })).toBeVisible();
 
   await page.getByRole("link", { name: "用量分析" }).click();
-  await expect(page.getByRole("heading", { name: "用量分析", level: 2 })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "用量分析", level: 1 })).toBeVisible();
   await expect(page.getByTestId("usage-chart")).toBeVisible();
 
   await page.getByRole("link", { name: "会话与恢复" }).click();
@@ -521,4 +536,112 @@ test("the connection center runs one-click recovery and reports an exact safe fa
   await expect(page.getByText("原因代码：ssh_reverse_port_in_use")).toBeVisible();
   await expect(page.getByText("停止服务器上的旧 LabContext SSH 会话后再次修复。")).toBeVisible();
   await expect(page.getByRole("button", { name: "再次修复" })).toBeVisible();
+});
+
+
+test("AI connections owns identity changes; usage stays focused on quotas without model catalogs", async ({ page }) => {
+  const methods = await mockConsoleApi(page);
+  const errors: string[] = [];
+  page.on("pageerror", error => errors.push(error.message));
+  await page.goto("/");
+  await expect(page.getByTitle("Research account")).toBeVisible();
+  await expect(page.getByRole("button", { name: "添加 Codex 账号" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "切换到此账号" })).toHaveCount(0);
+  await page.getByRole("tab", { name: /Claude Code/ }).click();
+  await expect(page.getByText("剩余 82%", { exact: true }).first()).toBeVisible();
+  await expect(page.getByText("Example model", { exact: true })).toHaveCount(0);
+  expect(methods).not.toContain("apikey/modelCatalogList");
+  await expect(page.getByRole("button", { name: /网页登录|登录其他|设为默认/ })).toHaveCount(0);
+  await page.getByRole("link", { name: "AI 接入", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "AI 接入中心" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "添加 Codex 账号" })).toBeVisible();
+  await expect(page.getByRole("button", { name: /刷新.*额度/ })).toHaveCount(0);
+  await page.getByRole("tab", { name: /Claude Code/ }).click();
+  await expect(page.getByRole("button", { name: "登录其他 Claude Code 账号" })).toBeVisible();
+  await expect(page.getByText("剩余 82%", { exact: true }).first()).toHaveCount(0);
+  await page.getByRole("tab", { name: /Antigravity/ }).click();
+  await expect(page.getByRole("button", { name: "登录其他 Antigravity 账号" })).toBeVisible();
+  await page.setViewportSize({width:390,height:844});
+  await expect(page.getByRole("heading", { name: "AI 接入中心" })).toBeVisible();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+  expect(errors).toEqual([]);
+  expect(methods).toContain("aiAccounts/action");
+});
+
+
+test("active accounts lead, web quota preserves unknowns, and CLI analytics switches independently", async ({ page }) => {
+  const methods = await mockConsoleApi(page);
+  const errors: string[] = [];
+  page.on("pageerror", error => errors.push(error.message));
+  await page.goto("/");
+  await expect(page.getByTestId("codex-quota-card").first()).toContainText("Research account");
+  await expect(page.getByTestId("codex-quota-card").first()).toHaveAttribute("data-active-account", "true");
+  const pool = page.getByRole("region", {name:"网页账号池额度"});
+  await expect(pool).toContainText("剩余 82%");
+  await expect(pool).toContainText("剩余未知");
+  await expect(page.getByText("Codex 模型目录", {exact:true})).toHaveCount(0);
+  await page.getByRole("link", {name:"用量分析",exact:true}).click();
+  await page.getByRole("tab", {name:/Claude Code/}).click();
+  await expect(page.getByRole("heading", {name:"Claude Code 使用概览"})).toBeVisible();
+  await expect(page.getByTestId("usage-chart")).toBeVisible();
+  await expect(page.getByText("模型回复次数", {exact:true})).toBeVisible();
+  await expect(page.getByText("参考金额 · USD", {exact:true})).toHaveCount(0);
+  await page.getByRole("tab", {name:/Antigravity/}).click();
+  await expect(page.getByRole("heading", {name:"Antigravity 使用概览"})).toBeVisible();
+  await expect(page.getByTestId("quota-history-chart")).toBeVisible();
+  await expect(page.getByTestId("usage-chart")).toHaveCount(0);
+  await page.setViewportSize({width:390,height:844});
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+  expect(methods).toContain("aiConnections/quota");
+  expect(errors).toEqual([]);
+});
+
+
+test("sessions switch across three CLIs with pinned recovery and honest empty state", async ({ page }) => {
+  await mockConsoleApi(page);
+  await page.goto("/sessions/");
+  await expect(page.getByText("Session Demo", { exact: true }).first()).toBeVisible();
+  await page.getByRole("tab", { name: "Claude Code" }).click();
+  await expect(page.getByText("Claude session demo", { exact: true }).first()).toBeVisible();
+  await expect(page.getByRole("combobox", { name: "Claude Code 会话账号" })).toHaveValue("claude-a");
+  await expect(page.locator("code").filter({hasText:"--resume"})).toContainText("--account-id claude-a");
+  await page.getByRole("textbox", {name:"Claude Code 搜索会话"}).fill("no-match");
+  await page.getByRole("button", {name:"搜索会话",exact:true}).click();
+  await expect(page.getByText("没有匹配的会话，请尝试其他关键词。")).toBeVisible();
+  await page.getByRole("tab", { name: "Antigravity" }).click();
+  await expect(page.getByText("此账号暂无已保存的会话。")).toBeVisible();
+  await expect(page.locator("code").filter({hasText:"--continue"})).toContainText("--account-id agy-a");
+  await expect(page.locator("body")).not.toContainText("CodexManager");
+  await page.setViewportSize({width:390,height:844});
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBeTruthy();
+});
+
+test("README screenshots show current screens using only isolated demo data", async ({ page }) => {
+  await mockConsoleApi(page, true);
+  await page.setViewportSize({ width: 1440, height: 1240 });
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await page.goto("/");
+  await expect(page.getByTestId("codex-quota-card").first()).toContainText("Research account");
+  await expect(page.getByRole("region", { name: "网页账号池额度" })).toContainText("剩余 82%");
+  await page.getByRole("tab", { name: /Claude Code/ }).click();
+  await expect(page.getByRole("region", { name: "官方账号额度" })).toContainText("剩余 82%");
+  await page.screenshot({ path: "test-results/readme-accounts.png", fullPage: true, animations: "disabled" });
+
+  await page.goto("/connections/#claude");
+  await expect(page.getByText("Claude personal", { exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "当前默认", exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "添加独立账号", exact: true })).toHaveCount(0);
+  await page.screenshot({ path: "test-results/readme-connections.png", fullPage: true, animations: "disabled" });
+
+  await page.goto("/analytics/");
+  await page.getByRole("tab", { name: /Claude Code/ }).click();
+  await expect(page.getByRole("heading", { name: "Claude Code 使用概览" })).toBeVisible();
+  await expect(page.getByTestId("usage-chart")).toBeVisible();
+  await page.screenshot({ path: "test-results/readme-analytics.png", fullPage: true, animations: "disabled" });
+
+  await page.goto("/labcontext/");
+  await expect(page.getByText("LabContext 已完全连通")).toBeVisible();
+  await expect(page.getByText("Example Research", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "收起", exact: true }).click();
+  await page.screenshot({ path: "test-results/readme-workspaces.png", fullPage: true, animations: "disabled" });
 });

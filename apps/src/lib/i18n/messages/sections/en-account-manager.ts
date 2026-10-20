@@ -56,8 +56,8 @@ export const EN_ACCOUNT_MANAGER_MESSAGES: MessageCatalog = {
   编辑: "Edit",
   编辑登录账号: "Edit login account",
   角色: "Role",
-  "请通过 CodexManager Web 运行壳访问账号管理。":
-    "Access account management through the CodexManager Web runtime shell.",
+  "请通过 AImanager Web 运行壳访问账号管理。":
+    "Access account management through the AImanager Web runtime shell.",
   请输入初始密码: "Enter the initial password",
   请输入用户名: "Enter a username",
   请选择可分发成员: "Select a billable member",

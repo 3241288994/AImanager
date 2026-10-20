@@ -95,7 +95,7 @@ export default function LabContextPage() {
               </div>
               <div className="min-w-0">
                 <div className="flex flex-wrap items-center gap-2">
-                  <p className="text-xs font-semibold uppercase tracking-[0.18em] text-primary">CodexManager · LabContext</p>
+                  <p className="text-xs font-semibold uppercase tracking-[0.18em] text-primary">AImanager · LabContext</p>
                   <Badge variant="outline">{location === "local" ? "当前设备" : "远程连接"}</Badge>
                 </div>
                 <h1 className="mt-2 text-2xl font-semibold tracking-tight sm:text-3xl">让 ChatGPT 读懂你的项目</h1>
