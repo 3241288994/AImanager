@@ -14,7 +14,9 @@ export function Header() {
   const { appSettings, serviceStatus } = useAppStore();
   const { t } = useI18n();
   const { mode } = useRuntimeCapabilities();
-  const title = pathname.startsWith("/analytics")
+  const title = pathname.startsWith("/connections")
+    ? "AI 接入"
+    : pathname.startsWith("/analytics")
     ? "用量分析"
     : pathname.startsWith("/labcontext")
       ? "工作区"
@@ -24,14 +26,14 @@ export function Header() {
   const canLogout = mode === "web-gateway" && appSettings.webAuthMode !== "none";
 
   return (
-    <header className="sticky top-0 z-30 flex h-16 items-center gap-3 border-b bg-background/90 px-4 backdrop-blur xl:px-6">
-      <h1 className="min-w-0 truncate text-lg font-semibold">{t(title)}</h1>
+    <header className="glass-header sticky top-0 z-30 flex h-16 items-center gap-3 border-b px-4 xl:px-6">
+      <h1 className="min-w-0 truncate text-sm font-semibold sm:text-lg">{t(title)}</h1>
       <Badge variant={serviceStatus.connected ? "default" : "secondary"} className="h-5">
         {serviceStatus.connected ? t("服务已连接") : t("服务未连接")}
       </Badge>
       {serviceStatus.version ? <span className="text-xs text-muted-foreground">v{serviceStatus.version}</span> : null}
       <div className="ml-auto flex shrink-0 items-center gap-2">
-        <LanguageSwitcher compact triggerClassName="w-[124px]" />
+        <LanguageSwitcher compact triggerClassName="w-[104px] sm:w-[124px]" />
         {canLogout ? (
           <Button variant="ghost" size="sm" className="gap-2 text-muted-foreground hover:text-destructive" onClick={() => window.location.assign("/__logout")} aria-label={t("退出登录")}>
             <LogOut className="size-3.5" /><span className="hidden sm:inline">{t("退出登录")}</span>

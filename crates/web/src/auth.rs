@@ -262,7 +262,7 @@ fn builtin_login_html(error: Option<&str>) -> String {
   <head>
     <meta charset="utf-8"/>
     <meta name="viewport" content="width=device-width, initial-scale=1"/>
-    <title>CodexManager Web 登录</title>
+    <title>AImanager Web 登录</title>
     <style>
       :root {{
         color-scheme: light;
@@ -357,9 +357,9 @@ fn builtin_login_html(error: Option<&str>) -> String {
   </head>
   <body>
     <form class="card" method="post" action="/__login">
-      <div class="mark">CM</div>
+      <div class="mark">AI</div>
       <h1>访问受保护</h1>
-      <p>当前 CodexManager Web 已启用访问密码，请先验证后再进入管理页面。</p>
+      <p>当前 AImanager Web 已启用访问密码，请先验证后再进入管理页面。</p>
       {error_html}
       <label for="password">访问密码</label>
       <input id="password" name="password" type="password" autocomplete="current-password" autofocus />
@@ -384,7 +384,7 @@ fn account_login_html(error: Option<&str>, bootstrap: bool) -> String {
     let desc = if bootstrap {
         "首次启用账号系统，请创建管理员账号。后续成员、额度和 Key 归属都由管理员维护。"
     } else {
-        "当前 CodexManager Web 已启用账号系统，请使用管理员或成员账号进入。"
+        "当前 AImanager Web 已启用账号系统，请使用管理员或成员账号进入。"
     };
     let display_name_field = if bootstrap {
         r#"<label for="display_name">显示名称</label>
@@ -398,7 +398,7 @@ fn account_login_html(error: Option<&str>, bootstrap: bool) -> String {
   <head>
     <meta charset="utf-8"/>
     <meta name="viewport" content="width=device-width, initial-scale=1"/>
-    <title>CodexManager Web 登录</title>
+    <title>AImanager Web 登录</title>
     <style>
       :root {{
         color-scheme: light;
@@ -493,7 +493,7 @@ fn account_login_html(error: Option<&str>, bootstrap: bool) -> String {
   </head>
   <body>
     <form class="card" method="post" action="/__login">
-      <div class="mark">CM</div>
+      <div class="mark">AI</div>
       <h1>{title}</h1>
       <p>{desc}</p>
       {error_html}
@@ -529,7 +529,7 @@ fn login_success_html() -> String {
   <head>
     <meta charset="utf-8"/>
     <meta name="viewport" content="width=device-width, initial-scale=1"/>
-    <title>CodexManager Web 登录</title>
+    <title>AImanager Web 登录</title>
   </head>
   <body>
     <script>
@@ -562,7 +562,7 @@ fn logout_success_html() -> String {
   <head>
     <meta charset="utf-8"/>
     <meta name="viewport" content="width=device-width, initial-scale=1"/>
-    <title>CodexManager Web 已退出</title>
+    <title>AImanager Web 已退出</title>
   </head>
   <body>
     <script>

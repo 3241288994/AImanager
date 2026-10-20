@@ -1,6 +1,11 @@
 macro_rules! invoke_handler {
     () => {
         tauri::generate_handler![
+            crate::commands::ai_connections::service_ai_connections_list,
+            crate::commands::ai_connections::service_ai_accounts_action,
+            crate::commands::ai_connections::service_ai_connections_save,
+            crate::commands::ai_connections::service_ai_connections_delete,
+            crate::commands::ai_connections::service_ai_connections_probe,
             // service
             crate::commands::usage_analytics::service_usage_analytics_read,
             crate::commands::usage_analytics::service_usage_analytics_refresh,

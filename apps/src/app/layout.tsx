@@ -9,8 +9,8 @@ import {
 } from "@/lib/appearance";
 
 export const metadata: Metadata = {
-  title: "CodexManager",
-  description: "Local-first account, session, and LabContext console for Codex",
+  title: "AImanager",
+  description: "Local-first AI CLI, private API, account and workspace management",
 };
 
 export default function RootLayout({

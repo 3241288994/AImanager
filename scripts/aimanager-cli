@@ -1,0 +1,19 @@
+#!/usr/bin/env python3
+"""Start the selected managed account without changing native default profiles."""
+import os
+from pathlib import Path
+import sys
+
+root = Path(os.environ.get("AIMANAGER_STATE_DIR", str(Path.home() / ".local/state/aimanager")))
+alias = {"claude": "claude", "agy": "antigravity"}.get(Path(sys.argv[0]).name)
+arguments = sys.argv[1:]
+if alias:
+    provider = alias
+elif arguments and arguments[0] in {"claude", "antigravity"}:
+    provider, arguments = arguments[0], arguments[1:]
+else:
+    raise SystemExit("Usage: aimanager-cli claude|antigravity [--] [official CLI arguments]")
+worker = root / "worker.py"
+if not worker.is_file():
+    raise SystemExit("Open AImanager's AI connections page once to initialize the CLI manager")
+os.execv(sys.executable, [sys.executable, str(worker), "--root", str(root), "--run", provider, "--"] + (arguments[1:] if arguments[:1] == ["--"] else arguments))

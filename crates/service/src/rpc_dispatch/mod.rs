@@ -12,6 +12,8 @@ use crate::RpcActor;
 mod account;
 mod account_manager;
 mod aggregate_api;
+mod ai_accounts;
+mod ai_connections;
 mod apikey;
 mod app_settings;
 mod codex_profile;
@@ -222,6 +224,25 @@ fn ensure_method_allowed(actor: &RpcActor, method: &str) -> Result<(), String> {
     Err(permission_denied(method))
 }
 
+#[cfg(test)]
+mod ai_connection_access_tests {
+    #[test]
+    fn ai_connections_remain_administrator_only() {
+        for method in [
+            "aiAccounts/action",
+            "aiConnections/list",
+            "aiConnections/save",
+            "aiConnections/delete",
+            "aiConnections/probe",
+        ] {
+            assert!(!super::member_method_allowed(method));
+            let member = crate::RpcActor::from_parts(Some("member"), Some("test-member"));
+            assert!(super::ensure_method_allowed(&member, method).is_err());
+            assert!(super::ensure_method_allowed(&crate::RpcActor::system_admin(), method).is_ok());
+        }
+    }
+}
+
 /// 函数 `handle_request`
 ///
 /// 作者: gaohongshun
@@ -267,6 +288,12 @@ pub(crate) fn handle_request_with_actor(req: JsonRpcRequest, actor: RpcActor) ->
     }
 
     if let Some(resp) = account::try_handle(&req) {
+        return JsonRpcMessage::Response(resp);
+    }
+    if let Some(resp) = ai_connections::try_handle(&req) {
+        return JsonRpcMessage::Response(resp);
+    }
+    if let Some(resp) = ai_accounts::try_handle(&req) {
         return JsonRpcMessage::Response(resp);
     }
     if let Some(resp) = account_manager::try_handle(&req, &actor) {

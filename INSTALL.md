@@ -1,6 +1,7 @@
 # 安装：贴一个路径，让 ChatGPT 读懂本机和服务器项目
 
-这份文件是 CodexManager 面向人类与自动化 Agent 的统一安装入口。安装完成后，用户可以直接把
+这份文件是 AImanager（原 CodexManager）面向人类与自动化 Agent 的统一安装入口。现有二进制名、
+环境变量和数据路径保留兼容，见 [AI 接入与更名说明](docs/ai-connections.md)。安装完成后，用户可以直接把
 授权范围内的本机或服务器绝对路径贴给 ChatGPT；Agent 负责在明确边界内完成大部分部署工作，只把
 OpenAI 网页授权、秘密注入和高风险选择留给用户。
 
@@ -12,8 +13,8 @@ OpenAI 网页授权、秘密注入和高风险选择留给用户。
 | `server` | 服务器 Provider；本机 Router + SSH bridge + Tunnel | 服务器授权目录 | 只研究服务器项目 |
 | `hybrid`（推荐） | 本机与服务器各自安装 Provider；本机运行 Router + SSH bridge + Tunnel | 本机与服务器授权目录 | 用一个 ChatGPT 连接统一研究两端项目 |
 
-Provider、Router、CodexManager Web 和 Tunnel 是解耦组件。无需为了只使用一种模式而安装另外一端，
-也不要把 Provider 的 `/admin`、CodexManager 的 `/api/rpc` 或 SSH 端口当作 MCP endpoint。
+Provider、Router、AImanager Web 和 Tunnel 是解耦组件。无需为了只使用一种模式而安装另外一端，
+也不要把 Provider 的 `/admin`、AImanager 的 `/api/rpc` 或 SSH 端口当作 MCP endpoint。
 
 ## 一句话交给 Agent
 
@@ -30,7 +31,7 @@ Provider、Router、CodexManager Web 和 Tunnel 是解耦组件。无需为了�
 先完整阅读仓库中的 AGENTS.md、INSTALL.md，以及 INSTALL.md 指向的相关文档，再开始操作。
 遵守 INSTALL.md 的 Agent 执行契约：先只读盘点与备份，再安装；复用已有 SSH 配置和密钥；
 不得在对话、命令输出、日志或 Git 中显示 token、密码、API key 和私钥。
-已有 CodexManager、Provider、Router、Tunnel、数据库和配置不得直接覆盖。
+已有 AImanager / CodexManager、Provider、Router、Tunnel、数据库和配置不得直接覆盖。
 遇到 OpenAI 页面授权或秘密注入时暂停并给我最短的人工操作说明，其余步骤继续自动完成。
 最终运行全部验收项，并报告组件版本、监听地址、通过/失败项、备份位置和下一步。
 ```
@@ -62,7 +63,7 @@ Provider、Router、CodexManager Web 和 Tunnel 是解耦组件。无需为了�
 
 只读取与所选拓扑有关的说明：
 
-- CodexManager Web/服务器：[服务器安全部署](docs/open-source/01-server-deployment.md)
+- AImanager Web/服务器：[服务器安全部署](docs/open-source/01-server-deployment.md)
 - Provider 与路径授权：[Provider README](labcontext-provider/README.md) 和
   [`labcontext.example.toml`](labcontext-provider/labcontext.example.toml)
 - Router、SSH bridge 和三种模式：[统一 LabContext Router](docs/labcontext-router.md)
@@ -140,7 +141,7 @@ python3 -m unittest discover -s scripts/tests -p 'test_*.py'
 Agent 最终只需给用户以下信息：
 
 - 采用的模式，以及每个组件安装在哪台机器；
-- Provider、Router、CodexManager 和 Tunnel 的版本/状态；
+- Provider、Router、AImanager 和 Tunnel 的版本/状态；
 - 哪些端口在回环地址监听；
 - 验收命令的通过项与唯一未完成的人工步骤；
 - 备份和回滚位置；

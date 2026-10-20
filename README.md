@@ -1,8 +1,15 @@
-# 贴一个路径，让 ChatGPT 读懂你的本机和服务器项目
+# AImanager
 
 <p align="center">
-  <strong>CodexManager · 从一个绝对路径开始的本机 / 服务器项目理解入口</strong>
+  <strong>统一管理 AI CLI、私有 API 与本机 / 服务器项目上下文</strong>
 </p>
+
+AImanager（原 CodexManager）保留已有 Codex 账号、额度、会话与 LabContext 能力，新增
+「AI 接入」中心，支持 Claude Code / Antigravity 独立多账号、官方网页登录与额度快照，以及 Gemini
+网页账号池等私有 Chat Completions API 的配置、启停检测和模型目录探测。
+CLI 安装不等于已登录；API 目录可达不等于生成成功。当前不会自动迁移或复用第三方项目的 OAuth token。
+
+[AI 接入与更名兼容说明](docs/ai-connections.md) · **贴一个路径，让 ChatGPT 读懂你的本机和服务器项目。**
 
 <p align="center">
   <a href="https://github.com/3241288994/codexmanager/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/3241288994/codexmanager/actions/workflows/ci.yml/badge.svg" /></a>
@@ -17,11 +24,11 @@
 
 [交给 Agent 安装](INSTALL.md) · [路径直读与工作区](docs/local-workspaces.md) · [连接 ChatGPT](docs/open-source/03-openai-plugin-and-tunnel.md) · [服务器部署](docs/open-source/01-server-deployment.md)
 
-English: **Paste a path and let ChatGPT understand a project on your computer or server.** CodexManager connects authorized ChatGPT workflows to bounded, read-only project tools while keeping administration and credentials private.
+English: **AImanager unifies AI CLI access, private API connections, and project context.** Paste a path and let ChatGPT understand a project on your computer or server, with bounded tools and private credentials.
 
 <p align="center">
   <a href="docs/assets/codexmanager-promo-v1.png">
-    <img width="760" alt="CodexManager：贴一个路径，让 ChatGPT 读懂本机与服务器项目" src="docs/assets/codexmanager-promo-v1.png" />
+    <img width="760" alt="AImanager：贴一个路径，让 ChatGPT 读懂本机与服务器项目（更名前宣传图）" src="docs/assets/codexmanager-promo-v1.png" />
   </a>
 </p>
 
@@ -151,14 +158,14 @@ LabContext Router · 127.0.0.1:1460/mcp
       ├── local Provider  ── 本机授权目录
       └── server Provider ── SSH bridge ── 服务器授权目录
 
-CodexManager Web · 127.0.0.1:48761
+AImanager Web · 127.0.0.1:48761
       └── 连接中心 / 工作区 / 研究图 / 用量与会话管理
 ```
 
 - **Provider** 负责受限、只读地理解文件与项目；
 - **Router** 把本机与服务器组合成一个稳定 MCP 工具面；
 - **Tunnel** 让 ChatGPT 在无需开放入站公网端口的情况下访问 Router；
-- **CodexManager** 提供连接诊断、工作区管理，以及 Codex 账号、额度、用量与会话辅助能力。
+- **AImanager** 提供 AI 接入、连接诊断、工作区管理，以及 Codex 账号、额度、用量与会话辅助能力。
 
 完整端口、SSH、Tunnel 和故障排查见[统一 LabContext Router](docs/labcontext-router.md)。
 
@@ -176,7 +183,7 @@ CodexManager Web · 127.0.0.1:48761
 
 ### 工作区与连接中心
 
-<img width="1682" height="812" alt="CodexManager 工作区与连接中心" src="https://github.com/user-attachments/assets/27f83e5e-67a3-4a74-aeec-398cc4647539" />
+<img width="1682" height="812" alt="AImanager 工作区与连接中心（更名前界面）" src="https://github.com/user-attachments/assets/27f83e5e-67a3-4a74-aeec-398cc4647539" />
 
 <details>
 <summary>查看更多界面：工作区、研究图、账号、用量与会话</summary>
@@ -207,7 +214,7 @@ CodexManager Web · 127.0.0.1:48761
 
 - 只有 `registry.allowed_roots` 下经过验证的路径可读；目录深度、条目数、文件大小、PDF 页数和单次响应均有限制。
 - 默认部署只监听回环地址；数据库、管理 RPC、账号令牌和 LabContext admin token 不应公开。
-- CodexManager service 本身不是 MCP endpoint；ChatGPT 连接的是独立 Router 的 `/mcp`，不是 `/api/rpc`、`/rpc` 或 `/admin`。
+- AImanager service 本身不是 MCP endpoint；ChatGPT 连接的是独立 Router 的 `/mcp`，不是 `/api/rpc`、`/rpc` 或 `/admin`。
 - 当前公开版不提供公共 OpenAI 兼容 `/v1` 网关。Secure MCP Tunnel 适合私有连接和开发测试，不是公共插件分发机制。
 - 请只读取你有权访问的本机和服务器目录，并遵守 OpenAI、Codex 与目标项目的适用条款。
 

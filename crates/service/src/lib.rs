@@ -1,6 +1,8 @@
 use codexmanager_core::rpc::types::{JsonRpcMessage, JsonRpcRequest};
 
 mod account;
+mod ai_connections;
+mod ai_accounts;
 mod account_identity;
 mod aggregate_api;
 mod apikey;
