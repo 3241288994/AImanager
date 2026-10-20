@@ -4,7 +4,6 @@ from pathlib import Path
 import re
 import unittest
 from urllib.parse import unquote, urlsplit
-import xml.etree.ElementTree as ET
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -13,9 +12,12 @@ class HtmlLinks(HTMLParser):
     def __init__(self):
         super().__init__()
         self.links = []
+        self.images = []
 
     def handle_starttag(self, tag, attributes):
         attributes = dict(attributes)
+        if tag == "img":
+            self.images.append(attributes)
         for key in ("src", "href"):
             if attributes.get(key):
                 self.links.append(attributes[key])
@@ -23,7 +25,10 @@ class HtmlLinks(HTMLParser):
 
 class PublicReadmeTest(unittest.TestCase):
     def test_readme_and_entry_docs_resolve_repository_links(self):
-        for name in ("README.md", "INSTALL.md", "docs/ai-connections.md", "docs/ai-collaboration.md"):
+        for name in (
+            "README.md", "INSTALL.md", "docs/ai-connections.md", "docs/ai-collaboration.md",
+            "docs/demos/collaboration-demo.md", "docs/demos/quota-example/README.md",
+        ):
             document = ROOT / name
             text = document.read_text(encoding="utf-8")
             html = HtmlLinks()
@@ -47,17 +52,27 @@ class PublicReadmeTest(unittest.TestCase):
         self.assertLess(text.index(demo), text.index("docs/assets/aimanager-accounts.png"))
         self.assertEqual((ROOT / demo).read_bytes()[:8], b"\x89PNG\r\n\x1a\n")
 
-    def test_collaboration_graph_is_static_and_accessible(self):
-        root = ET.parse(ROOT / "docs/assets/aimanager-collaboration-flow.svg").getroot()
-        tags = {node.tag.rsplit("}", 1)[-1] for node in root.iter()}
-        self.assertFalse(tags & {"script", "foreignObject", "image"})
-        self.assertEqual(root.attrib.get("role"), "img")
-        ids = {node.attrib.get("id") for node in root.iter()}
-        self.assertTrue(set(root.attrib["aria-labelledby"].split()) <= ids)
-        for node in root.iter():
-            self.assertFalse(any(key.lower().startswith("on") for key in node.attrib))
+    def test_promotional_banner_is_featured_once_before_usage_demos(self):
+        text = (ROOT / "README.md").read_text(encoding="utf-8")
+        banner = "docs/assets/aimanager-hero-v1.png"
+        self.assertEqual(text.count(banner), 1)
+        self.assertLess(text.index(banner), text.index("## 先看实际效果"))
+        self.assertEqual((ROOT / banner).read_bytes()[:8], b"\x89PNG\r\n\x1a\n")
+
+    def test_collaboration_demo_replaces_the_flow_and_has_accessible_text(self):
+        demo = "aimanager-collaboration-demo.png"
+        self.assertEqual((ROOT / "docs/assets" / demo).read_bytes()[:8], b"\x89PNG\r\n\x1a\n")
         for document in ("README.md", "docs/ai-collaboration.md"):
-            self.assertIn("aimanager-collaboration-flow.svg", (ROOT / document).read_text(encoding="utf-8"))
+            text = (ROOT / document).read_text(encoding="utf-8")
+            html = HtmlLinks()
+            html.feed(text)
+            images = [image for image in html.images if image.get("src", "").endswith(demo)]
+            with self.subTest(document=document):
+                self.assertEqual(len(images), 1)
+                self.assertIn("CLI", images[0].get("alt", ""))
+                self.assertIn("API", images[0].get("alt", ""))
+                self.assertIn("demos/collaboration-demo.md", text)
+                self.assertNotIn("aimanager-collaboration-flow.svg", text)
 
     def test_public_install_and_badge_use_the_current_repository_name(self):
         readme = (ROOT / "README.md").read_text(encoding="utf-8")

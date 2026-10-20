@@ -20,6 +20,10 @@
   <a href="docs/ai-connections.md">AI 接入与账号管理</a>
 </p>
 
+<p align="center">
+  <img width="960" alt="AImanager：让你的 AI 发挥更多价值，连接项目上下文、多模型协作与账号管理（品牌插画）" src="docs/assets/aimanager-hero-v1.png" />
+</p>
+
 ---
 
 **项目上下文接入、多模型协作与 AI 账号管理。**
@@ -54,13 +58,15 @@
 最后核对代码差异与测试结果。
 
 <p align="center">
-  <img width="960" alt="协作流程示意：主控 Agent 按需向 Codex CLI、Claude Code 与 API 模型传递材料、分析与反馈，完成交叉审阅、授权执行及结果复核" src="docs/assets/aimanager-collaboration-flow.svg" />
+  <img width="960" alt="真实协作记录摘要：Codex CLI 复现问题，Claude Code 审阅，Gemini API 参考双方意见，Claude 修改后由 Codex 独立复测，10 项测试通过" src="docs/assets/aimanager-collaboration-demo.png" />
 </p>
 
-这是**流程示意，不是实际任务截图或固定流水线**；分工可以调整，两个 CLI 都可以分析、审阅和执行授权任务。
-协作者之间的材料由主控按需转交，不自动共享全部文件或凭据；API 模型接收选定内容，不直接获得工作区文件权限。
-`ai-collab` 提供任务调用、结果传递与会话续接，编辑和执行仍需明确授权。
-[协作使用说明](docs/ai-collaboration.md) · [真实调用验证记录](docs/collaboration-validation.md)
+上图是隔离示例的**真实调用摘要**：Codex CLI 复现失败，Claude Code 独立审阅，Gemini API 参考双方发现并提出建议；
+Claude 续接讨论、修正方案，再通过新的授权任务修改代码；Codex 独立复测，主控再次确认，最终 **10 项测试全部通过**。
+两个 CLI 直接查看项目、修改与测试，API 模型参考双方分析补充建议，让讨论落实为代码变更和可验证的结果。
+
+分工可以调整；材料由主控按需转交，API 模型只接收选定文本。编辑和执行仍需明确授权。
+[本次调用记录与可复现示例](docs/demos/collaboration-demo.md) · [协作使用说明](docs/ai-collaboration.md) · [真实调用验证记录](docs/collaboration-validation.md)
 
 ## 为什么使用 AImanager
 
@@ -259,10 +265,6 @@ ai-collab reply JOB_ID --prompt "请结合这些问题，给出具体修改建�
 ### 项目工作区与连接中心
 
 <img width="960" alt="LabContext 本机与服务器工作区、授权工具和真实能力连接检查（演示数据）" src="docs/assets/aimanager-workspaces.png" />
-
-### 宣传横幅
-
-<img width="960" alt="AImanager：让你的 AI 发挥更多价值，连接项目上下文、多模型协作与账号管理（品牌插画）" src="docs/assets/aimanager-hero-v1.png" />
 
 </details>
 
