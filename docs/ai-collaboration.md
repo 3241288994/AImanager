@@ -8,6 +8,18 @@
 架构与取舍见 [方案](collaboration-runtime-design.md) 和 [接口设计](collaboration-interface-design.md)。
 本文描述 0.2.0 的实际接口；设计文档中的远期扩展不表示已经支持。
 
+## 先看一次协作如何衔接
+
+<img width="960" alt="多模型协作流程示意：主控 Agent 与 Codex CLI、Claude Code 和 API 模型交换选定材料、分析结果与反馈，再复核授权执行的结果" src="assets/aimanager-collaboration-flow.svg" />
+
+例如，Codex CLI 检查代码与测试，Claude Code 独立审阅方案，API 模型比较两份建议并指出证据缺口；
+主控把问题转交对应模型继续分析，再由获授权的 CLI 修改、运行检查，最后复核结果。
+这些是可调整的分工，不是角色限制或必跑流水线。CLI 和 API 都能参与讨论，区别在于工具和文件权限。
+
+信息经主控按需转交：`run` 新建任务，`reply` 继续原会话，`run --after` 将一个已完成任务的结果
+传给新任务。它们不代表模型自动直连或共享全部文件。`reply` 不能提升原任务的权限；
+从只读分析转为修改时，需要新建明确授权的 `exec` 任务。图中为流程示意，实际验证见[记录](collaboration-validation.md)。
+
 ## 三个卖点
 
 ### 1. 轻量自由，你的 AI 你来组合

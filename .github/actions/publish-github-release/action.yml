@@ -63,7 +63,7 @@ runs:
             ;;
         esac
 
-        TITLE="CodexManager $TAG"
+        TITLE="AImanager $TAG"
         mapfile -t FILES < <(find "$ASSETS_DIR" -type f \( \
           -name '*.exe' -o -name '*.zip' -o -name '*.dmg' -o -name '*.AppImage' -o -name '*.deb' \
         \) | sort)

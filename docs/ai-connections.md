@@ -95,14 +95,21 @@ aimanager-cli antigravity -- <Antigravity 参数>
 
 ## 更名兼容
 
-本轮更名覆盖产品标题、主要界面、桌面窗口与产品名称。暂保留：
+产品标题、主要界面、桌面窗口与 GitHub 仓库名均为 AImanager。
+仓库地址已更新为 [3241288994/AImanager](https://github.com/3241288994/AImanager)；已有克隆可执行：
 
-- GitHub 仓库 URL、Cargo 包、二进制 `codexmanager-service/web/start` 与现有启动命令；
+```bash
+git remote set-url origin https://github.com/3241288994/AImanager.git
+```
+
+运行时暂保留：
+
+- Cargo 包、二进制 `codexmanager-service/web/start` 与现有启动命令；
 - `CODEXMANAGER_*` 变量、现有配置/数据库目录、RPC/HTTP 协议标识和桌面 bundle identifier；
 - 历史版权、NOTICE、原项目来源及历史发布记录。
 
 不机械替换上述标识，避免新程序找不到旧数据、生成第二套数据库或破坏脚本。
-后续若迁移可执行文件或 GitHub 仓库名，应提供兼容别名、迁移与回滚步骤，而不是覆盖用户数据。
+后续若迁移可执行文件或数据路径，应提供兼容别名、迁移与回滚步骤，而不是覆盖用户数据。
 
 
 ## 接入与额度页面的职责

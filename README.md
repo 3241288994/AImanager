@@ -3,38 +3,68 @@
 <h3 align="center">让你的 AI 发挥更多价值</h3>
 
 <p align="center">
-  统一连接网页版、CLI 与 API，打通本地和服务器工作区，<br />
-  让分散的 AI 能力服务于同一个项目。
+  让 ChatGPT 网页版直接查看项目，<br />
+  让命令行 Agent 与 API 模型协同开发、交叉审阅。
 </p>
 
 <p align="center">
-  <a href="https://github.com/3241288994/codexmanager/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/3241288994/codexmanager/actions/workflows/ci.yml/badge.svg" /></a>
+  <a href="https://github.com/3241288994/AImanager/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/3241288994/AImanager/actions/workflows/ci.yml/badge.svg" /></a>
   <a href="LICENSE"><img alt="License: MIT" src="https://img.shields.io/badge/License-MIT-22c55e.svg" /></a>
 </p>
 
 <p align="center">
-  <a href="INSTALL.md"><strong>开始使用</strong></a> ·
+  <a href="#先看实际效果"><strong>实际演示</strong></a> ·
+  <a href="INSTALL.md">开始使用</a> ·
   <a href="docs/ai-collaboration.md">多模型协作</a> ·
   <a href="docs/local-workspaces.md">本地与服务器工作区</a> ·
   <a href="docs/ai-connections.md">AI 接入与账号管理</a>
 </p>
 
-<p align="center">
-  <img width="960" alt="AImanager：让你的 AI 发挥更多价值，连接项目上下文、多模型协作与账号管理" src="docs/assets/aimanager-hero-v1.png" />
-</p>
-
 ---
 
-**AImanager 把你已有的 AI 工具、账号与项目上下文连接起来。**
+**项目上下文接入、多模型协作与 AI 账号管理。**
 
-让 ChatGPT 网页版读懂本地电脑和服务器上的项目，让 CLI 与 API 模型共同分析、讨论和完成任务，
-再通过统一界面管理接入、额度、用量和会话。继续使用你熟悉的工具，按任务选择合适的模型与工作方式。
+通过 MCP 插件，让 ChatGPT 网页版按需读取本机和服务器上的代码、论文与实验文件，无需反复打包上传。
+在你当前使用的 Agent 中调用 Codex CLI、Claude Code 与 API 模型，按需传递项目材料、分析结论和测试结果，
+完成方案对比、代码修改与交叉审阅，并继续各自的会话。
 
-*Get more value from your AI. Connect web-based AI, CLI agents, and APIs with your local and server workspaces.*
+账号登录与切换、平台额度、用量记录和 CLI 会话恢复集中在一个界面，减少切换工具和手动转交结果的操作。
+
+*Get more value from your AI: project context, multi-model development and review, and account management across web, CLI, and API tools.*
+
+## 先看实际效果
+
+### ChatGPT 网页版：调用插件，结合项目文件回答问题
+
+下面是此前的**真实使用截图**：ChatGPT 调用 LabContext 检索实验决策与分析证据，
+再根据工作区中的材料解释实验指标和结论，而不是只根据对话中的描述猜测。
+
+<p align="center">
+  <img width="960" alt="真实使用：ChatGPT 网页版调用 LabContext 检索工作区实验决策与分析证据，并结合证据解释结果" src="docs/assets/chatgpt-labcontext-demo.png" />
+</p>
+
+现在还可以直接粘贴已授权的本机或服务器路径：**给出路径 → 查看目录 → 读取关键文件 → 解释项目或实验结果**。
+临时读取不需要先注册工作区；需要持续维护时，再保存为长期工作区。
+[连接 ChatGPT](docs/open-source/03-openai-plugin-and-tunnel.md) · [配置可读目录](docs/local-workspaces.md)
+
+### 多模型协作：多个 CLI 与 API 交换分析结果，再修改和验证
+
+例如，让 Codex CLI 检查实现和测试，Claude Code 独立审阅方案，API 模型比较两者的建议；
+主控 Agent 把关键分歧交回对应模型继续讨论，再将确认的方案交给获授权的 CLI 修改、运行检查，
+最后核对代码差异与测试结果。
+
+<p align="center">
+  <img width="960" alt="协作流程示意：主控 Agent 按需向 Codex CLI、Claude Code 与 API 模型传递材料、分析与反馈，完成交叉审阅、授权执行及结果复核" src="docs/assets/aimanager-collaboration-flow.svg" />
+</p>
+
+这是**流程示意，不是实际任务截图或固定流水线**；分工可以调整，两个 CLI 都可以分析、审阅和执行授权任务。
+协作者之间的材料由主控按需转交，不自动共享全部文件或凭据；API 模型接收选定内容，不直接获得工作区文件权限。
+`ai-collab` 提供任务调用、结果传递与会话续接，编辑和执行仍需明确授权。
+[协作使用说明](docs/ai-collaboration.md) · [真实调用验证记录](docs/collaboration-validation.md)
 
 ## 为什么使用 AImanager
 
-### 轻量开放，自由组合
+### 在现有 Agent 中调用多个模型
 
 在现有 Agent 中安装通用 skill 与轻量调用工具，即可组织多模型协作，无需新增常驻调度平台。
 谁负责、哪些模型参与、在哪个工作区开展工作，都可以按任务调整。
@@ -42,14 +72,14 @@
 模型别名与调用渠道由个人配置管理，协作规则不绑定某个模型版本。
 已有适配器可以复用，新的 CLI 或 API 渠道可以继续扩展。
 
-### 连接真实工作区，发挥各类 AI 的能力
+### 传递项目上下文，交叉审阅方案与执行结果
 
 网页版 AI 可以通过授权工具读取本地和服务器的项目材料；CLI 协作者可以自主检索文件、分析问题，
 并在授权范围内编辑和运行检查；API 模型基于相关材料参与设计、审阅、推理和写作。
 
 方案、证据与执行结果可以在参与者之间传递。角色随任务调整，讨论能够围绕实际项目持续推进。
 
-### 沉淀有效经验，让协作持续进化
+### 用任务配方复用分工与验证步骤
 
 用可复用的配方记录某类任务的材料要求、分工方式和关键步骤，让类似工作有经验可循。
 目前提供独立审阅、方案与执行、科研讨论、写作整理四份配方，支持按需使用和人工调整。
@@ -159,7 +189,7 @@ DOCX、XLSX、PPTX 和 IPYNB；具体读取内容与限制见[工作区说明](d
 将下面的占位符替换为自己的信息，交给能够操作目标设备的编码 Agent：
 
 ```text
-请安装或升级 https://github.com/3241288994/codexmanager 。
+请安装或升级 https://github.com/3241288994/AImanager 。
 
 安装模式：<local | server | hybrid>
 服务器 SSH Host：<已有 SSH 别名；local 模式删除此行>
@@ -229,6 +259,10 @@ ai-collab reply JOB_ID --prompt "请结合这些问题，给出具体修改建�
 ### 项目工作区与连接中心
 
 <img width="960" alt="LabContext 本机与服务器工作区、授权工具和真实能力连接检查（演示数据）" src="docs/assets/aimanager-workspaces.png" />
+
+### 宣传横幅
+
+<img width="960" alt="AImanager：让你的 AI 发挥更多价值，连接项目上下文、多模型协作与账号管理（品牌插画）" src="docs/assets/aimanager-hero-v1.png" />
 
 </details>
 
@@ -311,5 +345,6 @@ docs/                         使用、部署、设计与验证文档
 项目采用 [MIT License](LICENSE)，基于 `qxcnm/Codex-Manager` 的 MIT 许可代码演进而来。
 来源、版权与第三方声明见 [NOTICE](NOTICE) 和 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。
 
-产品名称已统一为 **AImanager**。GitHub 仓库地址、`codexmanager-*` 二进制和历史配置标识保留兼容，
-升级无需自行重命名数据库或配置目录。
+产品名称与 GitHub 仓库名均为 **AImanager**，新地址为 [3241288994/AImanager](https://github.com/3241288994/AImanager)。
+已有克隆可执行 `git remote set-url origin https://github.com/3241288994/AImanager.git` 更新远程地址。
+`codexmanager-*` 二进制、环境变量、数据库及配置路径保留兼容，升级无需自行重命名或迁移数据。

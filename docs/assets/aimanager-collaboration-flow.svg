@@ -1,0 +1,84 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="790" viewBox="0 0 1280 790" role="img" aria-labelledby="title description">
+  <title id="title">多个 CLI 与 API，围绕同一个项目互相参考</title>
+  <desc id="description">流程示意。主控 Agent 通过 ai-collab 向 Codex CLI、Claude Code 与 API 模型提交任务、取得结果并转交关键反馈。任务按需经历独立分析、互通反馈、明确授权的执行与结果复核。分工可调整；模型不自动共享全部文件或凭据，API 只接收选定材料。</desc>
+  <defs>
+    <linearGradient id="background" x1="0" y1="0" x2="1" y2="1">
+      <stop stop-color="#F8FAFF"/>
+      <stop offset="1" stop-color="#EFF9F6"/>
+    </linearGradient>
+    <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 1 1 L 9 5 L 1 9 Z" fill="#7089A8"/>
+    </marker>
+  </defs>
+  <rect width="1280" height="790" rx="28" fill="url(#background)"/>
+  <g font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Noto Sans CJK SC', 'Microsoft YaHei', sans-serif" fill="#14243C">
+    <text x="64" y="57" font-size="16" font-weight="700" letter-spacing="2" fill="#3168D4">AImanager · 多模型协作</text>
+    <text x="64" y="102" font-size="32" font-weight="750">多个 CLI + API，围绕同一个项目互相参考</text>
+
+    <rect x="390" y="132" width="500" height="102" rx="20" fill="#FFFFFF" stroke="#BDCEE8" stroke-width="2"/>
+    <text x="640" y="164" text-anchor="middle" font-size="23" font-weight="700">你当前使用的主控 Agent</text>
+    <text x="640" y="192" text-anchor="middle" font-size="18" fill="#536881">选取材料 · 分配权限 · 转交反馈 · 核验结果</text>
+    <text x="640" y="217" text-anchor="middle" font-size="16" fill="#3168D4">ai-collab：任务调用、结果传递、会话续接</text>
+
+    <g fill="none" stroke="#7089A8" stroke-width="2.5" marker-start="url(#arrow)" marker-end="url(#arrow)">
+      <path d="M 510 236 L 510 258 L 242 258 L 242 283"/>
+      <path d="M 640 236 L 640 283"/>
+      <path d="M 770 236 L 770 258 L 1038 258 L 1038 283"/>
+    </g>
+
+    <rect x="64" y="288" width="356" height="180" rx="20" fill="#FFFFFF" stroke="#BED3F4" stroke-width="2"/>
+    <circle cx="105" cy="327" r="20" fill="#E8F0FF"/>
+    <text x="105" y="334" text-anchor="middle" font-family="monospace" font-size="18" font-weight="700" fill="#3168D4">&gt;_</text>
+    <text x="138" y="335" font-size="23" font-weight="700">Codex CLI</text>
+    <text x="92" y="375" font-size="19">读取实现与测试，定位问题</text>
+    <text x="92" y="406" font-size="19">按确认的方案修改、运行检查</text>
+    <text x="92" y="440" font-size="16" fill="#63748A">保留原生会话，可继续上一轮工作</text>
+
+    <rect x="462" y="288" width="356" height="180" rx="20" fill="#FFFFFF" stroke="#EAD4BE" stroke-width="2"/>
+    <circle cx="503" cy="327" r="20" fill="#FBEEE1"/>
+    <text x="503" y="334" text-anchor="middle" font-family="monospace" font-size="18" font-weight="700" fill="#A76730">&gt;_</text>
+    <text x="536" y="335" font-size="23" font-weight="700">Claude Code</text>
+    <text x="490" y="375" font-size="19">独立分析方案，检查遗漏</text>
+    <text x="490" y="406" font-size="19">回应其他模型的问题与新证据</text>
+    <text x="490" y="440" font-size="16" fill="#63748A">保留原生会话，可继续上一轮工作</text>
+
+    <rect x="860" y="288" width="356" height="180" rx="20" fill="#FFFFFF" stroke="#B4DBD1" stroke-width="2"/>
+    <circle cx="901" cy="327" r="20" fill="#E3F6F0"/>
+    <text x="901" y="333" text-anchor="middle" font-family="monospace" font-size="14" font-weight="700" fill="#23785F">API</text>
+    <text x="934" y="335" font-size="23" font-weight="700">API 模型（如 Gemini）</text>
+    <text x="888" y="375" font-size="19">接收选定材料，比较不同方案</text>
+    <text x="888" y="406" font-size="19">交叉审阅代码差异与测试结果</text>
+    <text x="888" y="440" font-size="16" fill="#63748A">保留对话历史，不直接获得文件权限</text>
+
+    <text x="64" y="509" font-size="18" font-weight="700">一次任务的推进示例</text>
+    <text x="1216" y="509" text-anchor="end" font-size="16" fill="#63748A">分工可调整，不是固定流水线</text>
+    <g fill="#FFFFFF" stroke="#D9E2EC">
+      <rect x="64" y="530" width="266" height="86" rx="14"/>
+      <rect x="359" y="530" width="266" height="86" rx="14"/>
+      <rect x="654" y="530" width="266" height="86" rx="14"/>
+      <rect x="949" y="530" width="267" height="86" rx="14"/>
+    </g>
+    <g fill="none" stroke="#7089A8" stroke-width="2" marker-end="url(#arrow)">
+      <path d="M 335 573 L 352 573"/>
+      <path d="M 630 573 L 647 573"/>
+      <path d="M 925 573 L 942 573"/>
+    </g>
+    <g font-size="20" font-weight="700">
+      <text x="84" y="561">1 · 独立分析</text>
+      <text x="379" y="561">2 · 互通反馈</text>
+      <text x="674" y="561">3 · 授权执行</text>
+      <text x="969" y="561">4 · 结果复核</text>
+    </g>
+    <g font-size="16" fill="#63748A">
+      <text x="84" y="590">读取项目，分别形成初步判断</text>
+      <text x="379" y="590">传递关键差异、问题与证据</text>
+      <text x="674" y="590">新建 exec 任务，修改并测试</text>
+      <text x="969" y="590">核对差异、测试与遗留风险</text>
+    </g>
+
+    <rect x="64" y="641" width="1152" height="62" rx="16" fill="#E2F4ED" stroke="#A4D6C3"/>
+    <text x="640" y="680" text-anchor="middle" font-size="23" font-weight="700" fill="#22654F">交付：可检查的代码差异、测试结果与审阅结论</text>
+    <text x="64" y="740" font-size="17" fill="#536881">只读分析默认不修改项目；编辑与执行须另行授权。模型意见一致不等于结果正确。</text>
+    <text x="64" y="765" font-size="16" fill="#63748A">流程示意，非实际任务截图。协作者间由主控按需转交材料，不自动共享全部文件或凭据。</text>
+  </g>
+</svg>

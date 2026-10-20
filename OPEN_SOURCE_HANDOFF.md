@@ -51,7 +51,7 @@ git init -b main
 git add .
 git diff --cached --check
 git commit -m "chore: prepare public open-source release"
-git remote add origin https://github.com/your-account/codexmanager.git
+git remote add origin https://github.com/your-account/AImanager.git
 git push -u origin main
 ```
 

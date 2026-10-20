@@ -21,7 +21,7 @@ Provider、Router、AImanager Web 和 Tunnel 是解耦组件。无需为了只�
 把下面内容中的占位符换成自己的信息后，整段交给能操作目标电脑和服务器的编码 Agent：
 
 ```text
-请安装或升级 https://github.com/3241288994/codexmanager 。
+请安装或升级 https://github.com/3241288994/AImanager 。
 
 安装模式：<local | server | hybrid>
 服务器 SSH Host：<使用 ~/.ssh/config 中的别名；local 模式删除本行>
