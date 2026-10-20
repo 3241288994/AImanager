@@ -1,0 +1,16 @@
+Generated with the built-in image_gen tool on 2026-10-21.
+Purpose: GitHub README brand illustration, not a product screenshot.
+
+Use case: ads-marketing.
+Asset type: premium GitHub README hero banner, wide landscape 16:9.
+Primary request: Create an exceptionally polished, modern Chinese open-source AI productivity product banner for AImanager. This is a brand illustration, not a screenshot. It must convey connecting existing AI tools around one real project: web AI, CLI and API plus local/server project context, collaboration and account management.
+Style: sophisticated editorial tech design, generous whitespace, crisp typography, restrained translucent architectural cards and soft dimensional forms, realistic material light, no kitschy sci-fi. Match a light operational dashboard aesthetic with pearl-white/ice-blue backdrop, deep ink text, blue and mint accents. Excellent contrast, no overly pale text.
+Layout: large headline and wordmark occupy the upper-left/upper half; lower/right illustration is a calm compact system of three polished interconnected panels surrounding one shared project folder. Simple abstract code lines, two conversational bubbles, and an account window icon suggest context, collaboration, and account oversight. These are symbolic, not fabricated app screens. Clean margins, readable when reduced to GitHub width.
+Exact visible text, reproduce verbatim:
+"AImanager"
+"让你的 AI"
+"发挥更多价值"
+"项目上下文 · 多模型协作 · 账号管理"
+"Web / CLI / API"
+Use a large geometric Chinese sans-serif headline with confident editorial hierarchy. AImanager letter casing must be exact. Main slogan must read as one sentence across the two lines. No other text.
+Constraints: no ChatGPT-only claim, no old CodexManager branding, no manufacturer logos, no people, no robot mascots, no large server hardware or laptop photomontage, no quotas, no made-up model names, no percentages, no numbers, no fake UI controls, no watermark. Do not reuse the previous busy portrait poster. Output a complete beautiful finished wide raster banner, not a device mockup.

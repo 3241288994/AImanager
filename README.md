@@ -1,287 +1,315 @@
-# AImanager
+<h1 align="center">AImanager</h1>
+
+<h3 align="center">让你的 AI 发挥更多价值</h3>
 
 <p align="center">
-  <strong>统一管理 AI CLI、私有 API 与本机 / 服务器项目上下文</strong>
+  统一连接网页版、CLI 与 API，打通本地和服务器工作区，<br />
+  让分散的 AI 能力服务于同一个项目。
 </p>
-
-AImanager保留已有 Codex 账号、额度、会话与 LabContext 能力，新增
-「AI 接入」中心，支持 Claude Code / Antigravity 独立多账号、官方网页登录与额度快照，以及 Gemini
-网页账号池等私有 Chat Completions API 的配置、启停检测和模型目录探测。
-CLI 安装不等于已登录；API 目录可达不等于生成成功。当前不会自动迁移或复用第三方项目的 OAuth token。
-
-[AI 接入与更名兼容说明](docs/ai-connections.md) · [按模型名协作](docs/ai-collaboration.md) · **贴一个路径，让 ChatGPT 读懂你的本机和服务器项目。**
 
 <p align="center">
   <a href="https://github.com/3241288994/codexmanager/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/3241288994/codexmanager/actions/workflows/ci.yml/badge.svg" /></a>
   <a href="LICENSE"><img alt="License: MIT" src="https://img.shields.io/badge/License-MIT-22c55e.svg" /></a>
-  <img alt="LabContext Provider 0.9.0" src="https://img.shields.io/badge/LabContext-Provider%200.9.0-6366f1.svg" />
 </p>
-
-复制一个本机或服务器绝对路径，ChatGPT 就能在你授权的范围内查看目录、找到入口文件、继续读取
-关键代码与文档，并解释整个项目是做什么的——无需先上传项目，也无需先注册工作区。
-
-> **一句话卖点：把路径贴给 ChatGPT，让它直接读懂你电脑和服务器上的真实项目。**
-
-[交给 Agent 安装](INSTALL.md) · [路径直读与工作区](docs/local-workspaces.md) · [连接 ChatGPT](docs/open-source/03-openai-plugin-and-tunnel.md) · [服务器部署](docs/open-source/01-server-deployment.md)
-
-English: **AImanager unifies AI CLI access, private API connections, and project context.** Paste a path and let ChatGPT understand a project on your computer or server, with bounded tools and private credentials.
 
 <p align="center">
-  <a href="docs/assets/codexmanager-promo-v1.png">
-    <img width="760" alt="AImanager：贴一个路径，让 ChatGPT 读懂本机与服务器项目（更名前宣传图）" src="docs/assets/codexmanager-promo-v1.png" />
-  </a>
+  <a href="INSTALL.md"><strong>开始使用</strong></a> ·
+  <a href="docs/ai-collaboration.md">多模型协作</a> ·
+  <a href="docs/local-workspaces.md">本地与服务器工作区</a> ·
+  <a href="docs/ai-connections.md">AI 接入与账号管理</a>
 </p>
 
-## 一眼看懂它怎么用
+<p align="center">
+  <img width="960" alt="AImanager：让你的 AI 发挥更多价值，连接项目上下文、多模型协作与账号管理" src="docs/assets/aimanager-hero-v1.png" />
+</p>
 
-下面是一段典型流程。路径只是示例，实际可使用你已经授权的本机或服务器目录。
+---
 
-```text
-你：
-请读取服务器上的 /srv/research/web-agent，先看目录，再找到入口文件，告诉我这个项目怎么运行。
+**AImanager 把你已有的 AI 工具、账号与项目上下文连接起来。**
 
-ChatGPT：
-✓ 已确认来源：服务器
-✓ 已读取两层目录：README.md、pyproject.toml、src/、tests/、configs/
-✓ 找到主要入口：src/main.py
-✓ 继续检查 README.md、pyproject.toml 与入口模块
+让 ChatGPT 网页版读懂本地电脑和服务器上的项目，让 CLI 与 API 模型共同分析、讨论和完成任务，
+再通过统一界面管理接入、额度、用量和会话。继续使用你熟悉的工具，按任务选择合适的模型与工作方式。
 
-这是一个用于网页任务规划与执行的 Agent 项目：
-- src/main.py 负责启动任务和加载配置
-- src/agent/ 保存规划、动作选择与错误恢复逻辑
-- configs/ 定义模型、浏览器环境和实验参数
-- tests/ 覆盖页面解析与任务执行
+*Get more value from your AI. Connect web-based AI, CLI agents, and APIs with your local and server workspaces.*
 
-建议先从 README.md 的 Quick Start 启动，再查看 configs/default.yaml。
-```
+## 为什么使用 AImanager
 
-这个过程由四步组成：
+### 轻量开放，自由组合
 
-| 你做什么 | ChatGPT 做什么 |
-| --- | --- |
-| 1. 粘贴绝对路径 | 判断它来自本机还是服务器，并交给正确的 Provider |
-| 2. 要求“先看目录” | 返回有限深度的目录树，不把整个项目塞进上下文 |
-| 3. 要求“找到入口” | 按需读取 README、依赖配置和候选入口文件 |
-| 4. 继续追问 | 解释模块关系、运行方法、研究目标，或固定为长期工作区 |
+在现有 Agent 中安装通用 skill 与轻量调用工具，即可组织多模型协作，无需新增常驻调度平台。
+谁负责、哪些模型参与、在哪个工作区开展工作，都可以按任务调整。
 
-你也可以直接这样问：
+模型别名与调用渠道由个人配置管理，协作规则不绑定某个模型版本。
+已有适配器可以复用，新的 CLI 或 API 渠道可以继续扩展。
+
+### 连接真实工作区，发挥各类 AI 的能力
+
+网页版 AI 可以通过授权工具读取本地和服务器的项目材料；CLI 协作者可以自主检索文件、分析问题，
+并在授权范围内编辑和运行检查；API 模型基于相关材料参与设计、审阅、推理和写作。
+
+方案、证据与执行结果可以在参与者之间传递。角色随任务调整，讨论能够围绕实际项目持续推进。
+
+### 沉淀有效经验，让协作持续进化
+
+用可复用的配方记录某类任务的材料要求、分工方式和关键步骤，让类似工作有经验可循。
+目前提供独立审阅、方案与执行、科研讨论、写作整理四份配方，支持按需使用和人工调整。
+
+**后续规划：** 根据日常使用中的实际结果，自动提炼有效做法，保存适用条件与结果依据，
+在再次使用后持续修订。自动提炼、验证与写回机制尚未实现。
+
+## 从一句话开始
+
+以下是配置完成后可以使用的任务示例，路径和模型别名请替换为自己的配置。
+
+### 在网页版查看本地与服务器项目
 
 ```text
 请查看本地电脑的 /Users/me/Documents/project，找到入口文件并解释项目结构。
-请读取服务器 /srv/research/paper-a/README.md，总结当前研究目标与运行方法。
-请在服务器 /srv/research/experiments 下列出两层目录，并比较两个实验的结果文件。
+
+请读取服务器 /srv/research/paper-a/README.md，结合 results 目录总结目前的实验进展。
 ```
 
-## 把你常用的 CLI 和 API 模型搭配起来，一起完成任务
+通过 LabContext，ChatGPT 可以确认来源、查看有限目录树，再按需读取相关文件。
+临时读取只需提供授权范围内的路径，无需先上传整个项目或注册工作区。
+需要长期维护时，再将项目注册为工作区。
 
-在已安装并配置协作 skill 的 Agent 中，直接提出任务并报出模型名，例如：
+### 在当前 Agent 中按模型名协作
 
 ```text
 请与 opus5.5 一起查看这个项目，分别提出方案，再讨论关键差异并落实修改。
-请让 gemini4 分析这份材料，再结合项目中的实际约束给出建议。
+
+请让 gemini4 审阅这份实验设计，重点检查对照设置与可能的替代解释。
 ```
 
-- **轻量自由，你的 AI 你来组合。** 不增加常驻调度服务，谁负责、谁帮忙、怎样分工，
-  按任务决定；不同 CLI/API 可以通过适配器接入。
-- **让 CLI 和 API 都用上真本事。** CLI 自主查看项目、分析并执行授权任务，
-  API 围绕相关材料出方案、补思路、审阅结果；双方可以继续讨论和互相反馈。
-- **好用的做法留下来，下次不用从头教（规划中）。** 目标是自动把有效分工和步骤
-  整理成配方，遇到类似任务时复用、修订。目前已有任务记录和四份配方，尚未实现自动沉淀。
+主控准备必要材料、分配权限并核验结果；CLI 协作者进入指定工作区，
+API 协作者接收选定内容。后续可以继续同一会话，或把结果交给另一模型分析。
 
-三部分很简单：**Skill 教怎么合作，`ai-collab` 负责调用，配方保存做法。**
-目前执行工具要求 Linux，已适配 Claude Code、Codex CLI 和 Gemini API 渠道；
-新增渠道需要编写适配器，尚不是任意 CLI/API 即插即用。
-具体支持范围与三部分说明见[使用说明](docs/ai-collaboration.md)。
+`opus5.5`、`gemini4` 是示例别名，实际模型与渠道以个人配置为准。
+网页版发起协作需要另外启用 MCP 桥接策略，执行权限默认关闭。
 
-## 本机、服务器，或者两边一起
+### 用在不同类型的工作中
 
-| 模式 | 能访问什么 | 适合谁 |
+| 场景 | 可以怎样配合 |
+| --- | --- |
+| 论文与报告 | 读取原稿和结果表，讨论论证结构，交叉检查事实与表达 |
+| 科研探索 | 比较资料与候选思路，检查替代解释，结合工作区完善实验设计 |
+| 开发与实验 | CLI 查看实现、修改文件和运行检查，其他模型审阅方案与结果 |
+| 日常业务 | 围绕文档、表格和项目资料共同分析，整理方案与交付材料 |
+
+## 三部分，组成一套轻量协作方式
+
+| 组成 | 负责什么 | 为什么需要 |
 | --- | --- | --- |
-| `local` | 本机明确授权的目录 | 代码、论文和资料都在个人电脑上 |
-| `server` | SSH 后面的服务器授权目录 | 主要在科研服务器、工作站或私有云工作 |
-| `hybrid`（推荐） | 同一个 ChatGPT 连接中的本机 + 服务器 | 本机写作、服务器训练，希望上下文连贯 |
+| **通用 Skill** | 任务分工、上下文准备、讨论方式与结果核验 | 减少重复说明，让不同主控沿用一致的协作原则 |
+| **`ai-collab` 工具** | 调用 CLI/API、提交任务、获取结果、续接会话并落实权限范围 | 统一不同渠道的调用方式，减少手工拼命令和转交结果 |
+| **协作配方** | 保存特定任务的材料要求、分工方式、关键步骤与适用条件 | 为类似任务提供可调整的起点，承接后续经验积累 |
 
-两端完全解耦：只需要本机就不必安装服务器组件，只需要服务器也不必开放本机文件。访问范围始终由
-各端 Provider 的 `registry.allowed_roots` 控制；根目录、凭据、隐藏密钥和不支持的二进制不会因为
-贴了路径就自动开放。
+**工作区接入提供项目上下文，Skill 组织协作，工具连接模型与执行环境，配方积累有效经验。**
 
-## 两种使用方式
+讨论按任务需要展开：重要方案先独立判断，再聚焦影响决策的差异；事实查来源，推理查前提，
+取舍对照用户要求。既支持独立审阅，也支持共同构造更好的方案，不强制固定角色或讨论轮数。
 
-### 路径直读：临时、快速、零注册
+详见[协作使用说明](docs/ai-collaboration.md)、[讨论指南](skills/multi-model-collaboration/references/discussion.md)
+与[验证记录](docs/collaboration-validation.md)。
 
-`inspect_path` 适合“现在帮我看看这个目录/文件”。Provider 0.9.0 支持（工作区文件读取共用同一解析器）：
+## 一个界面，管理日常 AI 使用
 
-- 有限深度目录树；
-- 常见代码、配置、日志、文本及 README、Dockerfile、Makefile 等文件；
-- HTML 可见正文，不加载外部资源；
-- 文本型 PDF 的分页读取与搜索；
-- DOCX 正文、XLSX 单元格、PPTX 幻灯片文字和 IPYNB 源码/纯文本输出；
-- 扫描型 PDF 的明确 OCR 提示，而不是猜测内容。
+| 功能 | 你可以做什么 |
+| --- | --- |
+| **AI 接入** | 管理 Codex、Claude Code、Antigravity 的登录与账号选择，以及私有 API 入口和连接检测 |
+| **账号与额度** | 查看各平台额度窗口、重置时间和最近快照；已验证的当前账号优先显示并突出标记 |
+| **网页账号池** | 查看受支持账号池的可用状态、套餐及五小时／周额度，识别过期快照与探测失败 |
+| **CLI 用量分析** | 按 Codex、Claude Code、Antigravity 切换，查看各平台实际可采集的用量与额度历史 |
+| **会话与恢复** | 按三个 CLI 搜索服务主机上的会话记录，查看信息并复制对应账号的恢复命令 |
+| **工作区** | 维护项目概述、证据、实验、分析任务与研究图，为长期工作保留上下文 |
+| **连接中心** | 检查 Router、Provider、SSH 与 Tunnel；降级时提供一键修复、诊断和人工处理建议 |
 
-### 工作区：长期项目上下文
+不同平台提供的数据范围不同，缺失指标保留为未知。
+Codex 支持每日 Credits、Tokens、交互历史、JSON/CSV 导出和 USD 参考估算；
+Claude Code 的 Token 统计来自服务主机已保存的会话日志；Antigravity 在缺少可靠 Token 数据时展示额度快照。
+参考金额不代表实际账单，也不将不同平台的额度相加。
 
-需要持续研究时，再把路径固定为工作区。工作区可以维护项目概述、证据索引、实验结果、研究图、
-分析任务和最近 Codex 会话衔接。路径直读与工作区共用同一套目录授权，但互不强制：先读懂，再决定
-是否长期管理。
+详细说明：[AI 接入与额度](docs/ai-connections.md) · [用量分析](docs/usage-analytics.md) · [CLI 会话恢复](docs/cli-sessions.md)
 
-## 最省事的安装方式：交给 Agent
+## 本地、服务器，或者两边一起
 
-不用逐行复制部署命令。把下面内容交给能操作目标电脑和服务器的编码 Agent：
+| 模式 | 工作区访问范围 | 适用场景 |
+| --- | --- | --- |
+| `local` | 本机明确授权的目录 | 项目与资料主要保存在个人电脑上 |
+| `server` | 服务器明确授权的目录 | 主要在远程工作站或科研服务器开展工作 |
+| `hybrid` | 同一个 ChatGPT 连接中的本机与服务器目录 | 本机写作与整理，服务器开发、计算或运行实验 |
 
-```text
-请安装 https://github.com/3241288994/codexmanager ，模式为 hybrid。
-服务器 SSH Host 是 <你的 SSH 别名>；本机允许读取 <本机目录>，服务器允许读取 <服务器目录>。
-请先完整阅读仓库中的 AGENTS.md 和 INSTALL.md，按其中的 Agent 执行契约操作；
-沿用已有 SSH 配置和密钥，不在对话或日志中输出凭据。只有必须由我在 OpenAI 页面完成时再通知我。
-```
+本机与服务器分别配置访问范围，组件按需部署。
+LabContext Provider 负责文件和项目读取，Router 统一路由两端工具，Tunnel 提供私有 MCP 连接。
+协作模块可独立通过 CLI 使用，也可按策略接入 MCP。
 
-只使用一端时把模式改为 `local` 或 `server`。[`INSTALL.md`](INSTALL.md) 定义了只读盘点、备份、
-组件安装、人工授权检查点与真实调用验收，Agent 不应把“端口已打开”误报成“已经完全连通”。
+### 路径直读与长期工作区
 
-## 连接异常：点一下“一键修复”
+- **路径直读**：适合临时查看文件、目录或项目，提供绝对路径即可在授权范围内读取。
+- **长期工作区**：适合持续推进的项目，保存概述、证据索引、实验记录与研究关系。
 
-打开 `http://127.0.0.1:48761/labcontext/`：
+两种入口共用文件解析器和类型白名单。支持常见代码与文本、HTML 正文、文本型 PDF、
+DOCX、XLSX、PPTX 和 IPYNB；具体读取内容与限制见[工作区说明](docs/local-workspaces.md)。
+扫描型 PDF 会提示需要 OCR，目录与响应按预算返回。
 
-1. 连接降级时点击 **一键修复**；
-2. 系统自动诊断，清理可验证的旧 SSH 转发或孤儿组件，重建连接并重新验证；
-3. 无法安全修复时，页面直接显示具体原因和处理建议。
+## 开始使用
 
-清理期间若另一个合法的 LabContext 启动器已经接管连接，修复会等待并核对 Router 的真实状态，避免把
-短暂的 SSH 端口交接误报为失败。
+### 交给你常用的编码 Agent 安装
 
-如果 Router 完全没有运行，终端执行：
-
-```bash
-labcontext repair
-```
-
-`repair` 会自行完成诊断；不要写成 `labcontext doctor && labcontext repair`，因为诊断发现故障时会
-返回非零状态，Shell 的 `&&` 会阻止修复命令执行。
-
-## 它是如何连接起来的
-
-日常使用只需要记住 `labcontext`；下面的组件可以分别安装、升级和替换：
-
-```bash
-labcontext status   # 分层状态
-labcontext doctor   # 真实验证 SSH 与依赖
-labcontext repair   # 降级时安全重建链路
-```
+将下面的占位符替换为自己的信息，交给能够操作目标设备的编码 Agent：
 
 ```text
-ChatGPT 网页版
-      │
-      ▼
-Secure MCP Tunnel
-      │
-      ▼
-LabContext Router · 127.0.0.1:1460/mcp
-      ├── local Provider  ── 本机授权目录
-      └── server Provider ── SSH bridge ── 服务器授权目录
+请安装或升级 https://github.com/3241288994/codexmanager 。
 
-AImanager Web · 127.0.0.1:48761
-      └── 连接中心 / 工作区 / 研究图 / 用量与会话管理
+安装模式：<local | server | hybrid>
+服务器 SSH Host：<已有 SSH 别名；local 模式删除此行>
+本机允许读取的目录：<本机绝对路径；server 模式删除此行>
+服务器允许读取的目录：<服务器绝对路径；local 模式删除此行>
+
+请先阅读仓库中的 AGENTS.md、INSTALL.md 及其指向的文档。
+复用已有 SSH 配置，保留现有账号、数据库、配置和凭据，按安装文档完成验证。
+同时阅读 docs/ai-collaboration.md，检查当前环境是否支持协作工具；
+如支持，请安装对应 skill，并按我指定的模型和已有授权配置协作渠道。
+需要我在官方页面完成授权时，给出具体步骤。
 ```
 
-- **Provider** 负责受限、只读地理解文件与项目；
-- **Router** 把本机与服务器组合成一个稳定 MCP 工具面；
-- **Tunnel** 让 ChatGPT 在无需开放入站公网端口的情况下访问 Router；
-- **AImanager** 提供 AI 接入、连接诊断、工作区管理，以及 Codex 账号、额度、用量与会话辅助能力。
+完整部署步骤见 [INSTALL.md](INSTALL.md)。账号登录、目录授权和渠道配置仍需使用自己的信息。
 
-完整端口、SSH、Tunnel 和故障排查见[统一 LabContext Router](docs/labcontext-router.md)。
+### 已有环境，只安装协作工具
 
-## 不只是路径读取
+在仓库根目录运行，当前执行工具要求 **Linux、Python 3.8+**：
 
-路径直读是主入口，下面这些能力为长期研究提供配套：
+```bash
+python3 scripts/install-ai-collab.py
+ai-collab init
+ai-collab doctor
+```
 
-- **可验证、可一键修复的连接中心**：逐层检查 Router、Provider 身份与版本、真实 MCP 调用、SSH 子进程和 Tunnel；降级时先安全诊断再自动重建，无法处理则直接显示具体原因。
-- **项目工作区**：管理模型可见资产、工具策略、项目概述、证据、实验、分析任务与研究图。
-- **账号与额度**：通过官方设备授权添加账号，显示实际生效身份、套餐信号与额度快照，并切换服务器 Codex 凭据。
-- **用量分析**：保存 Credits、Token 与交互历史，提供趋势图、JSON/CSV 导出和非账单性质的 USD 参考估算。
-- **会话恢复**：读取 `state_5.sqlite` 元数据搜索本地会话并生成 `codex resume` 命令，不导出原始对话。
+安装后按[协作文档](docs/ai-collaboration.md)配置模型与账号，确保 `~/.local/bin` 在 `PATH` 中。
+安装器默认将 skill 放入 Codex 的 skill 目录，可用 `--skill-dir` 指定其他主控的 skill 目录。
+新安装的 skill 通常需要新开会话发现。
+
+```bash
+# 查看模型别名实际指向的渠道
+ai-collab resolve opus5.5
+
+# 委派指定工作区的只读任务
+ai-collab run --model opus5.5 --workspace /path/to/project \
+  --prompt "审阅项目结构，指出需要优先处理的问题"
+
+# 使用提交时返回的任务 ID 获取结果、继续讨论
+ai-collab wait JOB_ID --timeout 30
+ai-collab result JOB_ID
+ai-collab reply JOB_ID --prompt "请结合这些问题，给出具体修改建议"
+```
+
+`doctor` 检查配置与连接条件；真实任务结果仍需单独验证。
+编辑或运行任务需要明确指定执行权限，详见协作文档。
 
 ## 界面预览
 
-### 工作区与连接中心
+以下截图来自当前代码的浏览器回归测试，使用隔离的演示数据，不含真实账号、邮箱或凭据。
+额度数字仅用于展示界面，不代表实际余额或跨平台合计。
 
-<img width="1682" height="812" alt="AImanager 工作区与连接中心（更名前界面）" src="https://github.com/user-attachments/assets/27f83e5e-67a3-4a74-aeec-398cc4647539" />
+### 账号与额度
+
+<img width="960" alt="AImanager 账号与额度：三个 CLI 平台独立管理，网页账号池按时间窗口展示，未知数据保留未知（演示数据）" src="docs/assets/aimanager-accounts.png" />
 
 <details>
-<summary>查看更多界面：工作区、研究图、账号、用量与会话</summary>
+<summary>查看更多：AI 接入、用量分析与项目工作区</summary>
 
-#### 工作区与研究图
+### AI 接入
 
-<img width="2434" height="996" alt="工作区列表" src="https://github.com/user-attachments/assets/fc8eb835-e473-4a34-a8c9-831898cfbd7f" />
-<img width="2382" height="1184" alt="工作区详情" src="https://github.com/user-attachments/assets/aac5d7cf-b728-4936-96f3-a78aec1813c4" />
-<img width="2338" height="1240" alt="研究图" src="https://github.com/user-attachments/assets/b280447d-9625-42e3-96cc-4ea0c8a9b237" />
+<img width="960" alt="AI 接入中心：官方网页登录、默认账号与私有 API 入口（演示数据）" src="docs/assets/aimanager-connections.png" />
 
-#### 账号与额度
+### CLI 用量分析
 
-<img width="2358" height="1392" alt="账号与额度" src="https://github.com/user-attachments/assets/f197bd8d-97e6-45ba-ba54-9af31e89efdc" />
+<img width="960" alt="Claude Code 用量分析：来自会话记录的 Token 与交互趋势（演示数据）" src="docs/assets/aimanager-analytics.png" />
 
-#### 用量分析
+### 项目工作区与连接中心
 
-<img width="1195" height="390" alt="用量分析概览" src="https://github.com/user-attachments/assets/c17a9177-a750-4f48-99ff-c79d43227386" />
-<img width="1182" height="485" alt="用量趋势" src="https://github.com/user-attachments/assets/05e1b481-ffe0-4ded-80c6-ebe84711e62d" />
-<img width="1182" height="455" alt="价格参考" src="https://github.com/user-attachments/assets/6d02cfd2-1073-4c60-8166-3891f4436acf" />
-
-#### 会话恢复
-
-<img width="2366" height="1278" alt="会话恢复" src="https://github.com/user-attachments/assets/63e5a98a-f6b4-4fb9-8c10-37183dc9c444" />
+<img width="960" alt="LabContext 本机与服务器工作区、授权工具和真实能力连接检查（演示数据）" src="docs/assets/aimanager-workspaces.png" />
 
 </details>
 
-## 重要边界
+## 当前支持与后续方向
 
-- 只有 `registry.allowed_roots` 下经过验证的路径可读；目录深度、条目数、文件大小、PDF 页数和单次响应均有限制。
-- 默认部署只监听回环地址；数据库、管理 RPC、账号令牌和 LabContext admin token 不应公开。
-- AImanager service 本身不是 MCP endpoint；ChatGPT 连接的是独立 Router 的 `/mcp`，不是 `/api/rpc`、`/rpc` 或 `/admin`。
-- 当前公开版不提供公共 OpenAI 兼容 `/v1` 网关。Secure MCP Tunnel 适合私有连接和开发测试，不是公共插件分发机制。
-- 请只读取你有权访问的本机和服务器目录，并遵守 OpenAI、Codex 与目标项目的适用条款。
-
-详细边界见 [SECURITY.md](SECURITY.md) 和 [OpenAI 插件与 Tunnel 说明](docs/open-source/03-openai-plugin-and-tunnel.md)。
-
-## 手动部署与开发
-
-| 目标 | 文档 |
+| 能力 | 当前状态 |
 | --- | --- |
-| Agent 自动安装 | [INSTALL.md](INSTALL.md) |
-| 服务器安全部署 | [docs/open-source/01-server-deployment.md](docs/open-source/01-server-deployment.md) |
-| 本机路径与工作区 | [docs/local-workspaces.md](docs/local-workspaces.md) |
-| Router 与三种模式 | [docs/labcontext-router.md](docs/labcontext-router.md) |
-| ChatGPT、插件与 Tunnel | [docs/open-source/03-openai-plugin-and-tunnel.md](docs/open-source/03-openai-plugin-and-tunnel.md) |
-| 测试与发布 | [TESTING.md](TESTING.md) · [公开发布清单](docs/open-source/04-public-release-checklist.md) |
+| 本地与服务器路径读取、工作区、连接诊断与修复 | 已提供；按所选模式部署并授权 |
+| Codex、Claude Code、Antigravity 接入、额度与会话管理 | 已提供；数据与功能取决于对应 CLI、账号和运行环境 |
+| Claude Code、Codex CLI、Gemini API 协作 | 已适配；协作执行工具当前要求 Linux，新增渠道需要适配器 |
+| Antigravity 参与协作执行 | 尚未提供专用协作适配器；账号管理支持不等于协作适配支持 |
+| 原生 CLI 会话续接、API 对话续接、可选 MCP 桥接 | 已提供；MCP 执行权限默认关闭 |
+| 协作配方 | 已提供四份，可按需使用与人工调整 |
+| 从日常协作中自动提炼、验证和更新配方 | 规划中 |
+| 更广泛的 CLI/API 与跨平台协作支持 | 持续扩展 |
 
-本地开发要求 Node.js 20+、Python 3.11+、Rust stable；桌面打包还需要对应平台的 Tauri 依赖。
+真实调用、SSH 和不同平台的验证范围见[验证记录](docs/collaboration-validation.md)。
+协作模块的 Linux 要求不等于整个工作区接入方案只支持 Linux。
+
+## 连接诊断与数据边界
+
+连接异常时可在连接中心使用“一键修复”；Router 未运行时可在终端执行：
+
+```bash
+labcontext status
+labcontext doctor
+labcontext repair
+```
+
+- 本机与服务器只开放明确授权的目录，文件大小、目录深度和响应内容均有预算限制。
+- 默认部署只监听回环地址；管理 RPC、数据库、账号令牌和 Provider admin token 不应公开。
+- 私有账号凭据、数据库与运行配置不应提交到公开仓库；发送给模型的项目内容受所选渠道的数据政策约束。
+- ChatGPT 连接的是 Router 的 MCP 入口，AImanager 管理 RPC 不是 MCP endpoint。
+- 网页版能调用哪些操作由 MCP 策略决定；路径可读不代表拥有任意执行权限。
+- CLI 执行权限受适配器与原生沙箱共同约束，不能把工作区路径当作完整的容器隔离边界。
+
+详细配置见 [Router 文档](docs/labcontext-router.md)、[ChatGPT 与 Tunnel](docs/open-source/03-openai-plugin-and-tunnel.md)
+和 [SECURITY.md](SECURITY.md)。
+
+## 文档与开发
+
+| 主题 | 入口 |
+| --- | --- |
+| 安装与升级 | [INSTALL.md](INSTALL.md) |
+| 服务器部署 | [部署说明](docs/open-source/01-server-deployment.md) |
+| 工作区与文件读取 | [工作区说明](docs/local-workspaces.md) |
+| AI 接入、账号与更名兼容 | [接入说明](docs/ai-connections.md) |
+| 多模型协作 | [使用说明](docs/ai-collaboration.md) · [设计说明](docs/collaboration-runtime-design.md) |
+| 用量与会话 | [用量分析](docs/usage-analytics.md) · [CLI 会话恢复](docs/cli-sessions.md) |
+| 测试与发布 | [TESTING.md](TESTING.md) · [发布清单](docs/open-source/04-public-release-checklist.md) |
+
+源码开发要求 Node.js 20+、Python 3.11+ 和 Rust stable；桌面打包还需要对应平台的 Tauri 依赖。
 
 ```bash
 corepack pnpm@10.30.3 -C apps install --frozen-lockfile
 corepack pnpm@10.30.3 -C apps run build:desktop
 corepack pnpm@10.30.3 -C apps run test:runtime
 cargo test --workspace --locked -- --test-threads=1
-cargo test --manifest-path apps/src-tauri/Cargo.toml --locked --lib
 scripts/open-source/preflight.sh
 ```
 
-## 代码结构
+### 代码结构
 
 ```text
-labcontext-provider/     路径直读、工作区、证据与研究工具的只读 Provider
-scripts/labcontext*.py   本机 / 服务器统一 Router、SSH bridge 与启动诊断
-apps/                    Next.js 管理界面与 Tauri 桌面壳
-crates/web/              Web 运行壳、认证与受保护的 RPC 代理
-crates/service/          账号、额度、会话、用量和 LabContext 管理适配
-crates/core/             SQLite、认证与共享数据结构
-crates/start/            service + web 启动器
-deploy/                  安全 Compose 与 Router 示例配置
-plugins/                 不含用户连接 ID 的公开插件模板
-docs/                    路径、部署、Tunnel、安全与发布文档
+apps/                         Next.js 管理界面与 Tauri 桌面壳
+crates/                       账号、额度、用量、会话、存储与 Web 服务
+labcontext-provider/          文件解析、工作区与项目上下文
+scripts/labcontext*.py        Router、SSH bridge、启动与诊断
+scripts/ai_collab/            模型适配、任务调用与会话续接
+skills/multi-model-collaboration/  通用协作 skill 与可选配方
+deploy/                       部署示例
+docs/                         使用、部署、设计与验证文档
 ```
 
 ## 贡献、许可与来源
 
-- 安全问题请遵循 [SECURITY.md](SECURITY.md)，不要在公开 Issue 中提交凭据或可利用细节。
-- 贡献流程见 [CONTRIBUTING.md](CONTRIBUTING.md)。
-- 项目采用 [MIT License](LICENSE)，基于 `qxcnm/Codex-Manager` 的 MIT 许可代码演进而来；详见 [NOTICE](NOTICE) 与[第三方声明](THIRD_PARTY_NOTICES.md)。
+欢迎贡献新的 CLI/API 适配器、协作配方、跨平台支持和实际使用反馈。
+贡献流程见 [CONTRIBUTING.md](CONTRIBUTING.md)，安全问题请按 [SECURITY.md](SECURITY.md) 报告。
 
-会话与恢复支持 Codex、Claude Code 和 Antigravity，详见 [CLI 会话恢复](docs/cli-sessions.md)。
+项目采用 [MIT License](LICENSE)，基于 `qxcnm/Codex-Manager` 的 MIT 许可代码演进而来。
+来源、版权与第三方声明见 [NOTICE](NOTICE) 和 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。
+
+产品名称已统一为 **AImanager**。GitHub 仓库地址、`codexmanager-*` 二进制和历史配置标识保留兼容，
+升级无需自行重命名数据库或配置目录。
