@@ -1,9 +1,9 @@
 ---
 name: multi-model-collaboration
-description: Coordinate AImanager Ensemble (合奏) collaboration through ai-collab when the user names a model or requests joint design, independent review, analysis, or workspace work. A model-only message selects a collaborator for the active task. Comparisons and incidental mentions do not request a call.
+description: Coordinate model collaboration through ai-collab when the user names a model or requests joint design, independent review, analysis, or workspace work. A model-only message selects a collaborator for the active task. Comparisons and incidental mentions do not request a call.
 ---
 
-# AImanager Ensemble · 合奏
+# Lightweight model collaboration
 
 The current coordinating agent owns the final answer, regardless of its harness.
 Use the installed `ai-collab`; model aliases and accounts come from personal configuration.

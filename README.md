@@ -9,7 +9,7 @@ AImanager保留已有 Codex 账号、额度、会话与 LabContext 能力，新�
 网页账号池等私有 Chat Completions API 的配置、启停检测和模型目录探测。
 CLI 安装不等于已登录；API 目录可达不等于生成成功。当前不会自动迁移或复用第三方项目的 OAuth token。
 
-[AI 接入与更名兼容说明](docs/ai-connections.md) · [合奏：按模型名协作](docs/ai-collaboration.md) · **贴一个路径，让 ChatGPT 读懂你的本机和服务器项目。**
+[AI 接入与更名兼容说明](docs/ai-connections.md) · [按模型名协作](docs/ai-collaboration.md) · **贴一个路径，让 ChatGPT 读懂你的本机和服务器项目。**
 
 <p align="center">
   <a href="https://github.com/3241288994/codexmanager/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/3241288994/codexmanager/actions/workflows/ci.yml/badge.svg" /></a>
@@ -72,21 +72,26 @@ ChatGPT：
 请在服务器 /srv/research/experiments 下列出两层目录，并比较两个实验的结果文件。
 ```
 
-## AImanager 合奏：让你常用的 AI，带着其他 AI 一起把工作做完
+## 把你常用的 CLI 和 API 模型搭配起来，一起完成任务
 
-**主控可换，能力互补，成果可验。** 在已安装并配置协作 skill 的 Agent 中，
-直接提出任务并报出模型名，例如：
+在已安装并配置协作 skill 的 Agent 中，直接提出任务并报出模型名，例如：
 
 ```text
 请与 opus5.5 一起查看这个项目，分别提出方案，再讨论关键差异并落实修改。
 请让 gemini4 分析这份材料，再结合项目中的实际约束给出建议。
 ```
 
-原生 CLI 可以自主查看工作区、执行明确授权的任务；API 模型分析选定材料。
-主控负责组织讨论、核验和交付，协作者保留各自的工具与会话能力。
-通用 skill、`ai-collab` 工具和可选配方按需组合，无需新增常驻调度平台。
-目前执行工具要求 Linux；已适配 Claude Code、Codex CLI 和 Gemini 兼容 API，
-不同平台、渠道的实际支持与验证范围见[使用说明](docs/ai-collaboration.md)。
+- **轻量自由，你的 AI 你来组合。** 不增加常驻调度服务，谁负责、谁帮忙、怎样分工，
+  按任务决定；不同 CLI/API 可以通过适配器接入。
+- **让 CLI 和 API 都用上真本事。** CLI 自主查看项目、分析并执行授权任务，
+  API 围绕相关材料出方案、补思路、审阅结果；双方可以继续讨论和互相反馈。
+- **好用的做法留下来，下次不用从头教（规划中）。** 目标是自动把有效分工和步骤
+  整理成配方，遇到类似任务时复用、修订。目前已有任务记录和四份配方，尚未实现自动沉淀。
+
+三部分很简单：**Skill 教怎么合作，`ai-collab` 负责调用，配方保存做法。**
+目前执行工具要求 Linux，已适配 Claude Code、Codex CLI 和 Gemini API 渠道；
+新增渠道需要编写适配器，尚不是任意 CLI/API 即插即用。
+具体支持范围与三部分说明见[使用说明](docs/ai-collaboration.md)。
 
 ## 本机、服务器，或者两边一起
 
