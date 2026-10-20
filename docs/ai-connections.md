@@ -103,3 +103,16 @@ aimanager-cli antigravity -- <Antigravity 参数>
 
 不机械替换上述标识，避免新程序找不到旧数据、生成第二套数据库或破坏脚本。
 后续若迁移可执行文件或 GitHub 仓库名，应提供兼容别名、迁移与回滚步骤，而不是覆盖用户数据。
+
+
+## 接入与额度页面的职责
+
+- `/connections/` 是所有 AI 接入的统一入口：Codex 设备授权与身份切换、Claude Code / Antigravity 隔离登录与默认账号，以及 API 地址管理和连通性检测。
+- `/` 只提供额度窗口、重置时间、最近成功快照、模型目录及刷新。登录、添加与切换账号的操作均在接入中心。
+- 额度刷新失败保留上次成功快照，显示本次失败原因，不能将未知值显示为零或已恢复。
+- Claude 读取原生 CLI 使用的只读 OAuth usage 接口；此上游接口可能变化，401/403 需要重新验证官方授权，不会在管理端静默复制或改写 token。
+- Antigravity 读取官方 `/usage` 面板。首次主题、登录、条款与数据使用选项需要在官方 CLI 完成；不会自动接受数据收集选项，不提交模型生成请求。
+- Antigravity 模型通过 `agy models` 获取；Claude 仅展示官方缓存中未禁用的额外模型选项，明确标记不是完整模型列表。Codex 显示官方来源的服务模型目录，可能使用缓存，并非逐账号授权验证。API 入口读取上游 `/v1/models`，不会将健康状态当成额度。
+- 托管 CLI 和后台 worker 继承 HTTP_PROXY / HTTPS_PROXY / ALL_PROXY 与 NO_PROXY 及其小写形式。需要 SSH 反向代理时，在服务环境和命令启动环境配置同一地址，不要把端口写死到公共源码。
+
+验证：Python 账号与额度测试、前端运行时测试、主 Playwright（含两个页面的操作边界及 390px 布局）、静态构建、Service AI 专项和 Web Rust 测试。自定义浏览器路径可通过 `AIMANAGER_TEST_BROWSER` 指定。

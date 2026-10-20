@@ -229,6 +229,12 @@ async function mockConsoleApi(
     methods.push(body.method);
     const responses: Record<string, unknown> = {
       "appSettings/get": settings,
+      "aiAccounts/action": { items: [
+        { id: "claude-a", provider: "claude", label: "Claude personal", active: true, authStatus: "authenticated", quota: {state: "available", source: "official_oauth_usage", checkedAt: 1792491282, windows: [{label: "5 小时额度", remainingPercent: 82, usedPercent: 18, resetsAt: null}]}, models: { state: "available", items: [{id:"claude-example",name:"Example model"}], source: "official_cli_cache" } },
+        { id: "agy-a", provider: "antigravity", label: "Antigravity personal", active: true, authStatus: "authenticated", quota: {state: "unavailable", windows: [], note: "需要完成首次设置"} },
+      ], summary: {accounts:2,authenticated:2,quotaKnown:1} },
+      "aiConnections/list": {items:[],host:"test-host",cli:[]},
+      "apikey/modelCatalogList": {items:[{slug:"gpt-example",displayName:"GPT example",sourceKind:"remote"}]},
       initialize: {
         userAgent: "codex_cli_rs/0.1.0",
         codexHome: "/tmp/codex",
@@ -420,4 +426,33 @@ test("the connection center runs one-click recovery and reports an exact safe fa
   await expect(page.getByText("原因代码：ssh_reverse_port_in_use")).toBeVisible();
   await expect(page.getByText("停止服务器上的旧 LabContext SSH 会话后再次修复。")).toBeVisible();
   await expect(page.getByRole("button", { name: "再次修复" })).toBeVisible();
+});
+
+
+test("AI connections owns identity changes; usage stays focused on quotas and models", async ({ page }) => {
+  const methods = await mockConsoleApi(page);
+  const errors: string[] = [];
+  page.on("pageerror", error => errors.push(error.message));
+  await page.goto("/");
+  await expect(page.getByTitle("Research account")).toBeVisible();
+  await expect(page.getByRole("button", { name: "添加 Codex 账号" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "切换到此账号" })).toHaveCount(0);
+  await page.getByRole("tab", { name: /Claude Code/ }).click();
+  await expect(page.getByText("剩余 82%", { exact: true })).toBeVisible();
+  await expect(page.getByText("Example model", { exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: /网页登录|登录其他|设为默认/ })).toHaveCount(0);
+  await page.getByRole("link", { name: "AI 接入", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "AI 接入中心" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "添加 Codex 账号" })).toBeVisible();
+  await expect(page.getByRole("button", { name: /刷新.*额度/ })).toHaveCount(0);
+  await page.getByRole("tab", { name: /Claude Code/ }).click();
+  await expect(page.getByRole("button", { name: "登录其他 Claude Code 账号" })).toBeVisible();
+  await expect(page.getByText("剩余 82%", { exact: true })).toHaveCount(0);
+  await page.getByRole("tab", { name: /Antigravity/ }).click();
+  await expect(page.getByRole("button", { name: "登录其他 Antigravity 账号" })).toBeVisible();
+  await page.setViewportSize({width:390,height:844});
+  await expect(page.getByRole("heading", { name: "AI 接入中心" })).toBeVisible();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+  expect(errors).toEqual([]);
+  expect(methods).toContain("aiAccounts/action");
 });

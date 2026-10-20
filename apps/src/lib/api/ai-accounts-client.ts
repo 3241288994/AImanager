@@ -1,6 +1,9 @@
 import { invoke, withAddr } from "./transport";
 
 export type AiProvider = "claude" | "antigravity";
+export interface AiModelSnapshot {
+  state: "available" | "unavailable"; items: { id: string; name: string }[]; source?: string; checkedAt?: number; note?: string; lastError?: string;
+}
 export interface ManagedAiAccount {
   id: string;
   provider: AiProvider;
@@ -10,7 +13,8 @@ export interface ManagedAiAccount {
   authMethod?: string;
   authNote?: string;
   checkedAt?: number;
-  quota: { state: "unknown" | "available" | "unavailable"; source?: string; checkedAt?: number; note?: string;
+  models?: AiModelSnapshot;
+  quota: { lastError?: string; lastAttemptAt?: number; reasonCode?: string; state: "unknown" | "available" | "unavailable"; source?: string; checkedAt?: number; note?: string;
     windows: { label: string; usedPercent: number; remainingPercent: number; resetsAt: string | null }[] };
 }
 export interface AiAccountList {
@@ -43,6 +47,7 @@ function action<T>(params: Record<string, unknown>): Promise<T> {
   return invoke<T>("service_ai_accounts_action", withAddr({ params }), { timeoutMs: 30_000 });
 }
 export const aiAccountsClient = {
+  models: (accountId: string) => action<AiModelSnapshot>({ action: "models", accountId }),
   list: () => action<AiAccountList>({ action: "list" }),
   sync: (force = false) => action<AiAccountList>({ action: "sync", force }),
   connect: (provider: AiProvider) => action<AiAuthSession>({ action: "connect", provider }),

@@ -196,8 +196,123 @@ def synchronize_accounts(root, force=False):
     return account_list(root)
 
 
+def claude_quota_windows(payload):
+    labels = {"five_hour": "5 小时额度", "seven_day": "7 天额度", "seven_day_opus": "Opus 周额度", "seven_day_sonnet": "Sonnet 周额度", "seven_day_oauth_apps": "OAuth 应用周额度", "seven_day_cowork": "Cowork 周额度"}
+    windows = []
+    for key, label in labels.items():
+        value = payload.get(key)
+        if not isinstance(value, dict):
+            continue
+        used = value.get("utilization")
+        if type(used) not in (int, float) or not 0 <= used <= 100:
+            continue
+        reset = value.get("resets_at")
+        if not isinstance(reset, str) or len(reset) > 64:
+            reset = None
+        windows.append({"label": label, "usedPercent": round(used, 2), "remainingPercent": round(100-used, 2), "resetsAt": reset})
+    return windows
+
+
+def refresh_claude_quota(root, item, directory, status):
+    """Use the read-only usage endpoint used by Claude's native /usage command."""
+    from urllib.request import Request, build_opener, HTTPRedirectHandler
+    from urllib.error import HTTPError, URLError
+    home, _ = profile_env(root, item)
+    path = home / ".claude" / ".credentials.json"
+    if not path.is_file():
+        return False  # Older/native credential stores continue through the CLI.
+    if path.is_symlink() or path.stat().st_size > 32768 or path.stat().st_mode & 0o077:
+        raise ValueError("Claude credential file must be private and bounded")
+    credentials = read_json(path).get("claudeAiOauth", {})
+    token = credentials.get("accessToken")
+    if not isinstance(token, str) or not token:
+        return False
+    class NoRedirect(HTTPRedirectHandler):
+        def redirect_request(self, req, fp, code, msg, headers, newurl):
+            return None  # Never forward an OAuth header to another origin.
+    status.update(phase="reading_usage", message="正在读取官方额度接口", updatedAt=int(time.time()))
+    write_json(directory / "status.json", status)
+    quota = None
+    reason = "quota_not_reported"
+    note = "官方未返回可识别额度，请稍后重试。"
+    try:
+        request = Request("https://api.anthropic.com/api/oauth/usage", headers={"Authorization": "Bearer " + token, "anthropic-beta": "oauth-2025-04-20", "User-Agent": "aimanager-quota/1.0"})
+        with build_opener(NoRedirect()).open(request, timeout=15) as response:
+            data = response.read(1048577)
+        if len(data) > 1048576:
+            raise ValueError("Usage response exceeds limit")
+        payload = json.loads(data)
+        windows = claude_quota_windows(payload) if isinstance(payload, dict) else []
+        if windows:
+            quota = {"state": "available", "source": "official_oauth_usage", "checkedAt": int(time.time()), "windows": windows}
+    except HTTPError as error:
+        reason = "authorization_required" if error.code in (401, 403) else "quota_request_failed"
+        note = "授权已过期或无权限，请在 AI 接入中重新验证登录。" if error.code in (401, 403) else "官方额度接口暂不可用（HTTP %s），请稍后重试。" % error.code
+    except (OSError, URLError):
+        reason, note = "network_unavailable", "无法连接官方额度接口，请检查代理后重试。"
+    except (ValueError, TypeError):
+        pass
+    if (directory / "cancel.json").exists():
+        status.update(phase="cancelled", message="已取消额度刷新", updatedAt=int(time.time()))
+        write_json(directory / "status.json", status)
+        return True
+    if quota is not None:
+        update_account(root, item["id"], quota=quota)
+        status.update(phase="succeeded", message="官方额度已同步", reasonCode=None)
+    else:
+        previous = account(root, item["id"]).get("quota", {})
+        quota = dict(previous) if previous.get("state") == "available" else {"state": "unavailable", "source": "official_oauth_usage", "windows": [], "note": note}
+        quota.update(lastAttemptAt=int(time.time()), lastError=note, reasonCode=reason)
+        update_account(root, item["id"], quota=quota)
+        status.update(phase="failed", message=note, reasonCode=reason)
+    status.update(updatedAt=int(time.time()))
+    write_json(directory / "status.json", status)
+    return True
+
+
+def refresh_models(root, item):
+    """Read native model discovery without sending a generation request."""
+    home, env = profile_env(root, item)
+    snapshot = {"state": "unavailable", "items": [], "checkedAt": int(time.time())}
+    try:
+        if item["provider"] == "antigravity":
+            # A temporary file bounds pipe memory even if a CLI emits excessive logs.
+            import tempfile
+            with tempfile.TemporaryFile() as output:
+                result = subprocess.run([native("antigravity"), "models"], cwd=home, env=env,
+                                        stdout=output, stderr=subprocess.DEVNULL, timeout=15)
+                output.seek(0)
+                text = output.read(65537)
+            if result.returncode or len(text) > 65536:
+                raise ValueError("Model discovery failed")
+            for line in strip_terminal(text.decode("utf-8", errors="replace")).splitlines():
+                columns = line.split("\t", 1)
+                if len(columns) == 2 and re.fullmatch(r"[a-z][a-z0-9_.:/\[\]-]{1,100}", columns[0]):
+                    snapshot["items"].append({"id": columns[0], "name": columns[1][:160]})
+            snapshot.update(source="official_cli_models", note="官方 CLI 实时模型目录；实际调用仍受账号额度限制。")
+        else:
+            config = read_json(home / ".claude" / ".claude.json")
+            for model in config.get("additionalModelOptionsCache", [])[:100]:
+                if not isinstance(model, dict) or model.get("disabled"):
+                    continue
+                model_id = model.get("value", "")
+                if re.fullmatch(r"[a-z][a-z0-9_.:/\[\]-]{1,100}", model_id):
+                    snapshot["items"].append({"id": model_id, "name": str(model.get("label", model_id))[:160]})
+            snapshot.update(source="official_cli_cache", note="官方 CLI 缓存的额外模型选项，非完整目录；基础模型请以 CLI /model 为准。")
+        snapshot["items"] = snapshot["items"][:100]
+        snapshot["state"] = "available" if snapshot["items"] else "unavailable"
+    except (OSError, ValueError, subprocess.TimeoutExpired):
+        snapshot["note"] = "模型目录读取失败，请检查代理、登录状态及官方 CLI。"
+    previous = item.get("models", {})
+    if snapshot["state"] != "available" and previous.get("items"):
+        snapshot = dict(previous, lastError=snapshot.get("note"), lastAttemptAt=int(time.time()))
+    update_account(root, item["id"], models=snapshot)
+    return snapshot
+
+
 def strip_terminal(text):
     text = re.sub(r"\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)", "", text)
+    text = re.sub(r"\x1b\[\d*[GC]", " ", text)
     text = re.sub(r"\x1b\[[0-?]*[ -/]*[@-~]", "", text)
     return re.sub(r"[\x00-\x08\x0b-\x1f\x7f]", "", text)
 
@@ -211,7 +326,7 @@ def terminal_replies(chunk):
 
 
 def confirmation_prompt(text):
-    return bool(re.search(r"select login method|press enter|hit enter|enter to (?:continue|confirm)|enter select|trust this folder|trust.*directory|choose the text style|select (?:a )?theme", text[-4000:], re.I))
+    return bool(re.search(r"select login method|press enter|hit enter|enter to (?:continue|confirm)|enter select|trust this folder|trust.*directory|choose the text style|select (?:a )?theme|choose your color scheme", text[-4000:], re.I))
 
 
 def authorization_code_prompt(text):
@@ -319,6 +434,8 @@ def run_session(root, session_id):
     home, env = profile_env(root, item)
     binary = native(item["provider"])
     kind = status["kind"]
+    if kind == "usage" and item["provider"] == "claude" and refresh_claude_quota(root, item, directory, status):
+        return
     args = [binary, "auth", "login", "--claudeai"] if item["provider"] == "claude" and kind == "login" else [binary]
     child, terminal = pty.fork()
     if child == 0:
@@ -367,7 +484,15 @@ def run_session(root, session_id):
                     message = "Continue with the selected Google OAuth login option" if "select login method" in plain.lower() else "The official CLI is waiting for Enter to continue"
                     publish("needs_confirmation", message)
             else:
-                if not sent_usage and re.search(r"(?:help|shortcuts|try|ask|welcome|message|prompt|claude|antigravity)", plain[-6000:], re.I):
+                if re.search(r"terms of service.*data use|allowing.*collect", plain[-6000:], re.I | re.S):
+                    status["reasonCode"] = "onboarding_required"
+                    publish("failed", "请先在终端完成官方 CLI 的条款与数据使用选择，再刷新额度。")
+                    break
+                if re.search(r"select login method", plain[-4000:], re.I):
+                    status["reasonCode"] = "onboarding_required"
+                    publish("failed", "官方 CLI 尚未完成首次设置，请在 AI 接入中完成登录或在终端初始化。")
+                    break
+                if not sent_usage and re.search(r"(?:for shortcuts|\? for|try [\"“]|help for|^\s*[❯›>]\s*$|Welcome Claude; use /help)", plain[-6000:], re.I | re.M):
                     if not confirmation_prompt(plain):
                         os.write(terminal, b"/usage\r")
                         sent_usage = True
@@ -419,8 +544,14 @@ def run_session(root, session_id):
                 status["reasonCode"] = reason
                 publish("expired" if time.monotonic() >= deadline else "failed", message)
         else:
-            update_account(root, item["id"], quota={"state": "unavailable", "source": "official_cli_usage", "checkedAt": int(time.time()), "windows": [], "note": "This CLI did not expose a supported numeric quota panel; values remain unknown"})
-            publish("failed", "Official quota values are unavailable; no balance was estimated")
+            reason = status.get("reasonCode") or ("network_unavailable" if re.search(r"timeout|timed out|connection refused|ECONN|TLS|proxy|failed to connect|network|unexpected EOF", plain, re.I) else "quota_not_reported")
+            note = status["message"] if reason == "onboarding_required" else ("网络连接失败，请检查代理后重试。" if reason == "network_unavailable" else "官方 CLI 未返回可识别额度，请完成终端初始化后重试。")
+            previous = account(root, item["id"]).get("quota", {})
+            quota = dict(previous) if previous.get("state") == "available" else {"state": "unavailable", "source": "official_cli_usage", "windows": [], "note": note}
+            quota.update(lastAttemptAt=int(time.time()), lastError=note, reasonCode=reason)
+            update_account(root, item["id"], quota=quota)
+            status["reasonCode"] = reason
+            publish("failed", note)
     finally:
         alive = False
         try:
@@ -472,8 +603,10 @@ def dispatch(root, request):
             profile_env(root, item)
             value["accounts"].append(item)
         return item
-    if action in {"select", "login", "usage", "check"}:
+    if action in {"select", "login", "usage", "check", "models"}:
         item = account(root, request.get("accountId"))
+        if action == "models":
+            return refresh_models(root, item)
         if action == "select":
             if item.get("authStatus") != "authenticated":
                 raise ValueError("Sign in and verify this account before selecting it")

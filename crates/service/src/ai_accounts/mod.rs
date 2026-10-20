@@ -10,7 +10,7 @@ use std::{
 const WORKER: &str = include_str!("worker.py");
 const ACTIONS: &[&str] = &[
     "list", "sync", "connect", "create", "select", "login", "usage", "check", "session", "input",
-    "cancel",
+    "cancel", "models",
 ];
 
 fn state_root() -> Result<PathBuf, String> {

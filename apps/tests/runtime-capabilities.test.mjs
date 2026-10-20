@@ -98,7 +98,7 @@ test("normalizeRuntimeCapabilities 在 unsupported-web 下保持保守默认值"
   assert.equal(capabilities.canManageService, false);
   assert.equal(capabilities.canUseBrowserFileImport, false);
   assert.equal(capabilities.canUseBrowserDownloadExport, false);
-  assert.match(capabilities.unsupportedReason, /CodexManager Web 运行壳/);
+  assert.match(capabilities.unsupportedReason, /AImanager Web 运行壳/);
 });
 
 test("normalizeRuntimeCapabilities 在未知 mode 下回退到 web-gateway", () => {

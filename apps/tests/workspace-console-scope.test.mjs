@@ -21,7 +21,7 @@ async function routeDirectories(root, relative = "") {
 
 test("the public console exposes only its maintained top-level routes", async () => {
   const routes = (await routeDirectories(path.join(appsRoot, "src", "app"))).sort();
-  assert.deepEqual(routes, ["analytics", "labcontext", "sessions"]);
+  assert.deepEqual(routes, ["analytics", "connections", "labcontext", "sessions"]);
 
   const rootPage = path.join(appsRoot, "src", "app", "page.tsx");
   await fs.access(rootPage);
