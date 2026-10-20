@@ -1,6 +1,6 @@
 # Contributing
 
-Thanks for contributing to CodexManager.
+Thanks for contributing to AImanager.
 
 ## Development setup
 

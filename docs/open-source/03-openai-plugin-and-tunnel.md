@@ -2,13 +2,13 @@
 
 ## 当前仓库的边界
 
-CodexManager service 提供 Web 管理、内部 RPC 和可选 LabContext 管理适配，但**它自身不实现
+AImanager service 提供 Web 管理、内部 RPC 和可选 LabContext 管理适配，但**它自身不实现
 MCP endpoint，也不暴露 OpenAI 兼容 `/v1` 网关**。仓库另带一个可选、独立运行的
 LabContext Router，它在 `127.0.0.1:1460/mcp` 聚合已经存在的 LabContext Provider。因此：
 
 - 不要把 `/api/rpc`、`/rpc`、LabContext 管理端或个人 SSH 端口转发填入 ChatGPT 的 MCP 地址。
 - Secure MCP Tunnel 只能把已有的 MCP server（包括可选 Router）安全连接到 OpenAI；它不会把
-  普通 REST 或 CodexManager 管理 RPC 转换成 MCP。
+  普通 REST 或 AImanager 管理 RPC 转换成 MCP。
 - `plugins/codexmanager-connector` 是一个可公开分发的**技能型插件模板**。它不含 MCP
   连接、Tunnel ID、运行时 API Key 或用户专属 `.app.json`。
 
@@ -54,14 +54,14 @@ Platform organization，它不一定会出现在 Enterprise/Edu 工作区。完�
 
 ## 与 LabContext 的关系
 
-`LABCONTEXT_ADMIN_URL` 仅供 CodexManager 的管理适配使用。无论它指向同机 loopback、
+`LABCONTEXT_ADMIN_URL` 仅供 AImanager 的管理适配使用。无论它指向同机 loopback、
 Docker 宿主机网关还是私有转发，它都不是 MCP 地址。若要让 ChatGPT 使用科研工具，可让
 Tunnel 直接连接单个 LabContext `/mcp`，也可使用可选 Router 聚合多个 LabContext；不要把
 `/admin` 当成模型工具地址。
 
 ### 本地电脑上的工作区
 
-CodexManager 桌面版可以通过回环适配直接管理本机 LabContext，但这仍只是管理连接。若要让
+AImanager 桌面版可以通过回环适配直接管理本机 LabContext，但这仍只是管理连接。若要让
 ChatGPT 网页使用本机项目，需要在本机运行 MCP endpoint 和 Tunnel。统一 Router 可让一条
 Tunnel 同时路由本机与 SSH 转发后的服务器 Provider，同时保持两套 Provider 独立安装。配置见
 [统一 LabContext Router](../labcontext-router.md)，目录授权见[本地工作区](../local-workspaces.md)。
@@ -100,5 +100,5 @@ scripts/open-source/preflight.sh
 - prompt injection 防护与不可信内容隔离；
 - 日志脱敏、隐私政策、服务条款和安全响应渠道。
 
-先开源和维护自托管 CodexManager 源码与技能型插件；独立 MCP 层经过设计、测试和安全审计后，
+先开源和维护自托管 AImanager 源码与技能型插件；独立 MCP 层经过设计、测试和安全审计后，
 再作为单独里程碑发布。

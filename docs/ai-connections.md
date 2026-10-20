@@ -1,6 +1,6 @@
 # AImanager：AI 接入与更名兼容说明
 
-AImanager 是 CodexManager 的新产品名称。现有账号、数据库、LabContext 和服务部署保持兼容。
+产品名称统一为 AImanager。现有账号、数据库、LabContext 和服务部署保持兼容。
 
 ## AI 接入中心
 

@@ -4,7 +4,7 @@
   <strong>统一管理 AI CLI、私有 API 与本机 / 服务器项目上下文</strong>
 </p>
 
-AImanager（原 CodexManager）保留已有 Codex 账号、额度、会话与 LabContext 能力，新增
+AImanager保留已有 Codex 账号、额度、会话与 LabContext 能力，新增
 「AI 接入」中心，支持 Claude Code / Antigravity 独立多账号、官方网页登录与额度快照，以及 Gemini
 网页账号池等私有 Chat Completions API 的配置、启停检测和模型目录探测。
 CLI 安装不等于已登录；API 目录可达不等于生成成功。当前不会自动迁移或复用第三方项目的 OAuth token。
@@ -262,3 +262,5 @@ docs/                    路径、部署、Tunnel、安全与发布文档
 - 安全问题请遵循 [SECURITY.md](SECURITY.md)，不要在公开 Issue 中提交凭据或可利用细节。
 - 贡献流程见 [CONTRIBUTING.md](CONTRIBUTING.md)。
 - 项目采用 [MIT License](LICENSE)，基于 `qxcnm/Codex-Manager` 的 MIT 许可代码演进而来；详见 [NOTICE](NOTICE) 与[第三方声明](THIRD_PARTY_NOTICES.md)。
+
+会话与恢复支持 Codex、Claude Code 和 Antigravity，详见 [CLI 会话恢复](docs/cli-sessions.md)。

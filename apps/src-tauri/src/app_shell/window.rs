@@ -168,7 +168,7 @@ fn ensure_tray_preview_window(app: &tauri::AppHandle) -> Option<tauri::WebviewWi
         TRAY_PREVIEW_WINDOW_LABEL,
         WebviewUrl::App("tray-preview/".into()),
     )
-    .title("CodexManager")
+    .title("AImanager")
     .inner_size(TRAY_PREVIEW_WIDTH, TRAY_PREVIEW_HEIGHT)
     .min_inner_size(TRAY_PREVIEW_WIDTH, TRAY_PREVIEW_HEIGHT)
     .max_inner_size(TRAY_PREVIEW_WIDTH, TRAY_PREVIEW_HEIGHT)

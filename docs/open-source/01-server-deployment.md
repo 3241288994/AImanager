@@ -45,7 +45,7 @@ SSH 转发只解决管理者浏览器到服务器的访问问题；它不会把�
 
 ## 可选连接 LabContext
 
-CodexManager 只会连接 LabContext 的**管理员控制面**，不是模型工具 endpoint。原生运行时
+AImanager 只会连接 LabContext 的**管理员控制面**，不是模型工具 endpoint。原生运行时
 默认地址为 `http://127.0.0.1:1455/admin`，可显式覆盖：
 
 ```bash
@@ -80,7 +80,7 @@ docker compose --env-file deploy/.env \
 管理员 URL。
 
 个人 SSH Host 别名和临时端口转发命令不应进入仓库配置。若
-LabContext 只能通过转发访问，请让转发进程与原生 CodexManager 在同一私有网络边界内运行，
+LabContext 只能通过转发访问，请让转发进程与原生 AImanager 在同一私有网络边界内运行，
 或将 LabContext 部署到同一 Docker 宿主机；不要把管理员端口暴露到公网。
 
 ## 接口边界

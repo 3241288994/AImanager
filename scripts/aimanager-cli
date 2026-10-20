@@ -12,8 +12,13 @@ if alias:
 elif arguments and arguments[0] in {"claude", "antigravity"}:
     provider, arguments = arguments[0], arguments[1:]
 else:
-    raise SystemExit("Usage: aimanager-cli claude|antigravity [--] [official CLI arguments]")
+    raise SystemExit("Usage: aimanager-cli claude|antigravity [--account-id ID] [--] [official CLI arguments]")
 worker = root / "worker.py"
+account_args = []
+if arguments[:1] == ["--account-id"]:
+    if len(arguments) < 2:
+        raise SystemExit("--account-id requires an account ID")
+    account_args, arguments = arguments[:2], arguments[2:]
 if not worker.is_file():
     raise SystemExit("Open AImanager's AI connections page once to initialize the CLI manager")
-os.execv(sys.executable, [sys.executable, str(worker), "--root", str(root), "--run", provider, "--"] + (arguments[1:] if arguments[:1] == ["--"] else arguments))
+os.execv(sys.executable, [sys.executable, str(worker), "--root", str(root), "--run", provider] + account_args + ["--"] + (arguments[1:] if arguments[:1] == ["--"] else arguments))

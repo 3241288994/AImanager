@@ -22,6 +22,7 @@ const ACTIONS: &[&str] = &[
     "cancel",
     "models",
     "analytics",
+    "sessionCatalog",
 ];
 
 fn state_root() -> Result<PathBuf, String> {
@@ -56,6 +57,7 @@ fn install_worker(root: &std::path::Path) -> Result<PathBuf, String> {
     let script = root.join("worker.py");
     for (filename, content) in [
         ("usage_history.py", include_str!("usage_history.py")),
+        ("session_history.py", include_str!("session_history.py")),
         ("worker.py", WORKER),
     ] {
         let script = root.join(filename);

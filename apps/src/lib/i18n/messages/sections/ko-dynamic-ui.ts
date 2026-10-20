@@ -26,8 +26,8 @@ export const KO_DYNAMIC_UI_MESSAGES: MessageCatalog = {
     "현재 환경에서는 복사를 지원하지 않습니다. 수동으로 복사하세요.",
   当前环境不支持浏览器文件选择:
     "현재 환경에서는 브라우저 파일 선택을 지원하지 않습니다.",
-  "当前页面缺少 CodexManager Web 运行壳，无法访问管理 RPC。请通过 codexmanager-web 打开，或在反向代理中转发 /api/rpc。":
-    "현재 페이지에 CodexManager Web 런타임 셸이 없어 관리 RPC에 접근할 수 없습니다. codexmanager-web으로 열거나 리버스 프록시에서 /api/rpc를 전달하세요.",
+  "当前页面缺少 AImanager Web 运行壳，无法访问管理 RPC。请通过 codexmanager-web 打开，或在反向代理中转发 /api/rpc。":
+    "현재 페이지에 AImanager Web 런타임 셸이 없어 관리 RPC에 접근할 수 없습니다. codexmanager-web으로 열거나 리버스 프록시에서 /api/rpc를 전달하세요.",
   导出模型目录: "모델 카탈로그 내보내기",
   地址不合法: "유효하지 않은 주소",
   地址解析失败: "주소解析 실패",

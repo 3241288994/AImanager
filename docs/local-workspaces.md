@@ -3,10 +3,10 @@
 最短用法是把本机或服务器的绝对路径直接贴给 ChatGPT：先查看目录，再按需读取入口文件和关键文档。
 这不要求注册工作区；只有需要项目概述、证据、实验、研究图和长期会话衔接时，才把路径固定为工作区。
 
-CodexManager 可以在同一个“工作区”页面中切换两套独立连接：
+AImanager 可以在同一个“工作区”页面中切换两套独立连接：
 
 ```text
-服务器工作区：桌面/Web UI → CodexManager service → 服务器 LabContext
+服务器工作区：桌面/Web UI → AImanager service → 服务器 LabContext
 本地工作区：  桌面 UI     → Tauri 回环适配        → 本机 LabContext
                Web UI      → 可选回环 Router 管理桥 → 本机 LabContext
 ```
@@ -16,7 +16,7 @@ CodexManager 可以在同一个“工作区”页面中切换两套独立连接�
 
 ## 前提
 
-- 使用 CodexManager 桌面版，或在浏览器所在电脑启动可选的 LabContext Router。普通网页不能
+- 使用 AImanager 桌面版，或在浏览器所在电脑启动可选的 LabContext Router。普通网页不能
   自己读取文件系统，但可以把明确填写的路径交给回环 Router；Router 不可用时“本地电脑”保持禁用。
 - 在当前电脑上另行安装并启动兼容的 LabContext，且其管理员控制面监听 HTTP 回环地址。
 - 准备 LabContext admin token。默认读取：
@@ -81,7 +81,7 @@ LABCONTEXT_PROVIDER_PYTHON=python3.12 ./scripts/install-labcontext-provider.sh
 
 ## 让 ChatGPT 网页访问本地项目
 
-在 CodexManager 中添加本地目录只完成了**管理连接**；ChatGPT 仍需通过 Secure MCP Tunnel
+在 AImanager 中添加本地目录只完成了**管理连接**；ChatGPT 仍需通过 Secure MCP Tunnel
 访问一个 MCP endpoint。推荐让 Tunnel 指向统一 Router：
 
 ```text
@@ -93,7 +93,7 @@ ChatGPT 网页版
 ```
 
 在 OpenAI Platform 为本机连接创建或选择 Tunnel，然后在**当前电脑**上运行
-`tunnel-client`；它所指向的必须是本机 MCP 服务的 `/mcp` 地址，而不是 CodexManager 的
+`tunnel-client`；它所指向的必须是本机 MCP 服务的 `/mcp` 地址，而不是 AImanager 的
 `/api/rpc`、LabContext admin 地址或 SSH 转发。例如：
 
 ```bash
@@ -122,6 +122,6 @@ tunnel-client run --profile codexmanager-local
   独立、操作白名单化的管理桥。
 - 管理连接禁用系统代理，只允许回环 HTTP 地址，admin token 不返回前端。
 - 桌面版添加目录必须经过原生选择器的一次性授权；Web + Router 模式应依赖 Provider 的路径规则。
-- CodexManager service 本身不提供 MCP endpoint；Router 是可选、独立部署的最小路由层。
+- AImanager service 本身不提供 MCP endpoint；Router 是可选、独立部署的最小路由层。
 - 路径直读只访问 `registry.allowed_roots` 下经过校验的文件和有限目录树；工作区工具的最终可见
   范围仍由 LabContext 资产规则和工具策略决定。

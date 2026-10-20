@@ -49,7 +49,16 @@ export interface CliAnalyticsReport {
   coverage: { filesScanned: number; partial: boolean };
   quotaHistory: { capturedAt: number; windows: { label: string; remainingPercent: number; resetsAt: string | null }[] }[];
 }
+export interface CliSessionItem {
+  id: string; title: string; cwd: string | null; updatedAtMs: number; source: string;
+  cwdExists: boolean; visibility: "ready" | "missing_workspace" | "unknown_workspace"; resumeCommand: string;
+}
+export interface CliSessionCatalog {
+  accountId: string; provider: AiProvider; items: CliSessionItem[]; total: number;
+  coverage: { filesScanned: number; partial: boolean }; checkedAt: number; continueCommand: string; note: string;
+}
 export const aiAccountsClient = {
+  sessions: (accountId: string, query = "", limit = 100) => action<CliSessionCatalog>({ action: "sessionCatalog", accountId, query, limit }),
   analytics: (accountId: string, startDate: string, endDate: string) => action<CliAnalyticsReport>({ action: "analytics", accountId, startDate, endDate }),
   list: () => action<AiAccountList>({ action: "list" }),
   sync: (force = false) => action<AiAccountList>({ action: "sync", force }),

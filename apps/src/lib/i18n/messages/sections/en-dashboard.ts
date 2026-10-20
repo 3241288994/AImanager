@@ -3,8 +3,8 @@
 import type { MessageCatalog } from "../types";
 
 export const EN_DASHBOARD_MESSAGES: MessageCatalog = {
-  "CodexManager 无法统计 CLI 请求日志和用量。":
-    "CodexManager cannot collect CLI request logs or usage.",
+  "AImanager 无法统计 CLI 请求日志和用量。":
+    "AImanager cannot collect CLI request logs or usage.",
   "OpenAI 账号今日消耗": "OpenAI account usage today",
   "OpenAI 账号区间消耗": "OpenAI account usage in range",
   "Top Key": "Top key",

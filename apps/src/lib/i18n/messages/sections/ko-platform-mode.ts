@@ -4,8 +4,8 @@ import type { MessageCatalog } from "../types";
 
 export const KO_PLATFORM_MODE_MESSAGES: MessageCatalog = {
   平台模式选择: "플랫폼 모드 선택",
-  "选择 Codex CLI 直连账号，或通过 CodexManager 本地网关接入。":
-    "Codex CLI 계정 직결 또는 CodexManager 로컬 게이트웨이 경유 방식을 선택합니다.",
+  "选择 Codex CLI 直连账号，或通过 AImanager 本地网关接入。":
+    "Codex CLI 계정 직결 또는 AImanager 로컬 게이트웨이 경유 방식을 선택합니다.",
   写入位置说明: "쓰기 위치 안내",
   "这里修改的是 codexmanager-service 所在机器的 Codex 配置目录，不一定是当前浏览器所在机器。":
     "여기서 바꾸는 것은 codexmanager-service 가 실행 중인 머신의 Codex 설정 디렉터리이며, 현재 브라우저가 실행 중인 머신과 다를 수 있습니다.",
@@ -25,8 +25,8 @@ export const KO_PLATFORM_MODE_MESSAGES: MessageCatalog = {
   账号直连: "계정 직결",
   "OpenAI 账号": "OpenAI 계정",
   选择账号: "계정 선택",
-  "直连 OpenAI 官方后端，不经过 CodexManager 网关；不会产生 CodexManager 请求日志，仪表盘用量统计不可用。":
-    "CodexManager 게이트웨이를 거치지 않고 OpenAI 공식 백엔드에 직접 연결합니다. CodexManager 요청 로그와 대시보드 사용량 통계는 사용할 수 없습니다.",
+  "直连 OpenAI 官方后端，不经过 AImanager 网关；不会产生 AImanager 请求日志，仪表盘用量统计不可用。":
+    "AImanager 게이트웨이를 거치지 않고 OpenAI 공식 백엔드에 직접 연결합니다. AImanager 요청 로그와 대시보드 사용량 통계는 사용할 수 없습니다.",
   "没有可用于账号直连的 active OpenAI 账号。":
     "계정 직결에 사용할 수 있는 활성 OpenAI 계정이 없습니다.",
   "去添加 OpenAI 账号": "OpenAI 계정 추가",
@@ -35,8 +35,8 @@ export const KO_PLATFORM_MODE_MESSAGES: MessageCatalog = {
   "重新应用账号直连": "계정 직결 다시 적용",
   "切换到账号直连": "계정 직결로 전환",
   本地网关: "로컬 게이트웨이",
-  "通过 CodexManager 本地网关转发 Codex CLI 请求；请求日志、Token、费用估算和仪表盘统计可用。":
-    "Codex CLI 요청을 CodexManager 로컬 게이트웨이로 전달합니다. 요청 로그, 토큰, 비용 추정, 대시보드 통계를 사용할 수 있습니다.",
+  "通过 AImanager 本地网关转发 Codex CLI 请求；请求日志、Token、费用估算和仪表盘统计可用。":
+    "Codex CLI 요청을 AImanager 로컬 게이트웨이로 전달합니다. 요청 로그, 토큰, 비용 추정, 대시보드 통계를 사용할 수 있습니다.",
   "没有可用于本地网关的平台密钥。":
     "로컬 게이트웨이에 사용할 수 있는 플랫폼 키가 없습니다.",
   "去创建平台密钥": "플랫폼 키 생성",
@@ -69,7 +69,7 @@ export const KO_PLATFORM_MODE_MESSAGES: MessageCatalog = {
   "Gateway base_url": "Gateway base_url",
   "auth.json": "auth.json",
   "config.toml": "config.toml",
-  "CodexManager 管理文件": "CodexManager 관리 파일",
+  "AImanager 管理文件": "AImanager 관리 파일",
   管理标记: "관리 마커",
   可写: "쓰기 가능",
   是: "예",
@@ -89,8 +89,8 @@ export const KO_PLATFORM_MODE_MESSAGES: MessageCatalog = {
   备份目录: "백업 디렉터리",
   警告: "경고",
   "历史修复备份": "기록 복구 백업",
-  "备份保存在 CodexManager 数据目录，不再写入 Codex profile。":
-    "백업은 CodexManager 데이터 디렉터리에 저장되며 Codex profile에는 더 이상 쓰지 않습니다.",
+  "备份保存在 AImanager 数据目录，不再写入 Codex profile。":
+    "백업은 AImanager 데이터 디렉터리에 저장되며 Codex profile에는 더 이상 쓰지 않습니다.",
   "清理历史备份": "기록 백업 정리",
   "数量 / 占用": "개수 / 사용량",
   保留策略: "보관 정책",

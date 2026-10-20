@@ -1,17 +1,17 @@
 # 统一 LabContext Router
 
-CodexManager 可以把相互独立的本机 LabContext 和服务器 LabContext 放在一个可选 Router 后面，
+AImanager 可以把相互独立的本机 LabContext 和服务器 LabContext 放在一个可选 Router 后面，
 同时保持安装方式解耦：只装本机、只连服务器、两者并用都使用同一套命令和同一个 MCP 地址。
 
 ```text
 ChatGPT 网页版 ─ Secure MCP Tunnel ─┐
                                     ├─ 127.0.0.1:1460/mcp (Router)
-CodexManager Web 控制台 ────────────┘       ├─ local Provider  ─ 本机目录
+AImanager Web 控制台 ────────────┘       ├─ local Provider  ─ 本机目录
                                              └─ server Provider ─ SSH 转发 ─ 服务器目录
 ```
 
 Router 不包含 LabContext 本身，也不要求 Provider 由同一种方式安装。每个 Provider 只需提供兼容的
-`/mcp`；需要在 CodexManager Web 页面管理工作区时，再为它配置 `/admin` 和私有 token 文件。
+`/mcp`；需要在 AImanager Web 页面管理工作区时，再为它配置 `/admin` 和私有 token 文件。
 
 ## 安装与初始化
 
@@ -49,7 +49,7 @@ labcontext init hybrid --ssh-host your-server --tunnel-profile labcontext
 | `1455` | server Provider，或单 Provider 模式下的 LabContext |
 | `1456` | hybrid 模式下的 local Provider |
 | `1460` | 统一 Router 的 `/mcp`、健康检查和本机 Web 管理桥 |
-| `48761` | CodexManager Web UI；服务器模式下可由同一 SSH 连接转发 |
+| `48761` | AImanager Web UI；服务器模式下可由同一 SSH 连接转发 |
 
 在 hybrid 模式中，本机和转发后的服务器端口不能冲突。若本机 LabContext 仍监听 `1455`，请将它
 改到 `1456`，或相应修改 `config.toml` 与 `launcher.env` 中的 server 转发端口。
@@ -173,7 +173,7 @@ Router 重启期间页面会持续轮询恢复状态。
 不需要切换到 Tauri 桌面版。桌面版仍保留原生目录选择器，Web 版则要求填写运行 local Provider
 的电脑能够访问的绝对路径。
 
-如果 CodexManager Web 使用了其他 Origin，必须把精确 Origin 加入 `cors_origins` 后重启
+如果 AImanager Web 使用了其他 Origin，必须把精确 Origin 加入 `cors_origins` 后重启
 Router。不要使用通配 Origin，也不要把 `1460`、Provider 的 `/admin` 或 token 暴露到局域网或
 公网。
 

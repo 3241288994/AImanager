@@ -207,12 +207,12 @@ export const KO_MESSAGES: MessageCatalog = {
   "已唤起 ccswitch，请在确认窗口完成导入":
     "ccswitch를 열었습니다. 확인 창에서 가져오기를 완료하세요.",
 "唤起 ccswitch 失败": "ccswitch 열기 실패",
-  "当前为账号直连，Codex CLI 直连 OpenAI，CodexManager 无法统计 CLI 请求日志和用量。":
-    "현재 계정 직결 모드입니다. Codex CLI가 OpenAI에 직접 연결되므로 CodexManager는 CLI 요청 로그나 사용량을 집계할 수 없습니다.",
-  "当前为本地网关，Codex CLI 经过 CodexManager 转发，请求日志、Token 和费用统计可用。":
-    "현재 로컬 게이트웨이 모드입니다. Codex CLI 요청이 CodexManager를 통해 전달되므로 요청 로그, 토큰, 비용 통계를 사용할 수 있습니다.",
-  "选择账号直连或本地网关后，CodexManager 会接管该 Codex profile 的 auth.json / config.toml。":
-    "계정 직결 또는 로컬 게이트웨이 모드를 선택하면 CodexManager가 해당 Codex profile의 auth.json과 config.toml을 관리합니다.",
+  "当前为账号直连，Codex CLI 直连 OpenAI，AImanager 无法统计 CLI 请求日志和用量。":
+    "현재 계정 직결 모드입니다. Codex CLI가 OpenAI에 직접 연결되므로 AImanager는 CLI 요청 로그나 사용량을 집계할 수 없습니다.",
+  "当前为本地网关，Codex CLI 经过 AImanager 转发，请求日志、Token 和费用统计可用。":
+    "현재 로컬 게이트웨이 모드입니다. Codex CLI 요청이 AImanager를 통해 전달되므로 요청 로그, 토큰, 비용 통계를 사용할 수 있습니다.",
+  "选择账号直连或本地网关后，AImanager 会接管该 Codex profile 的 auth.json / config.toml。":
+    "계정 직결 또는 로컬 게이트웨이 모드를 선택하면 AImanager가 해당 Codex profile의 auth.json과 config.toml을 관리합니다.",
   删除密钥: "키 삭제",
   全部: "전체",
   低配额: "낮은 할당량",
@@ -1182,8 +1182,8 @@ export const KO_MESSAGES: MessageCatalog = {
   "点击步骤标签可直接跳转，按顺序做不容易漏。":
     "단계 태그를 눌러 바로 이동할 수 있지만, 순서대로 진행하면 빠뜨릴 가능성이 적습니다.",
   "步骤 {step}": "{step}단계",
-  "第一步：先确认 CodexManager 服务已经可用":
-    "1단계: 먼저 CodexManager 서비스가 사용 가능한지 확인",
+  "第一步：先确认 AImanager 服务已经可用":
+    "1단계: 먼저 AImanager 서비스가 사용 가능한지 확인",
   "先确认软件本身已经连上本地服务，再去配 CLI。这样能避免你配置写对了，但实际上连的是错端口或者空服务。":
     "먼저 앱 자체가 로컬 서비스에 연결되어 있는지 확인한 뒤 CLI를 설정하세요. 이렇게 하면 설정은 맞지만 실제로는 잘못된 포트나 비어 있는 서비스에 연결되는 상황을 피할 수 있습니다.",
   "打开软件后先看顶部或设置页里的“服务已连接”状态。":
@@ -1194,16 +1194,16 @@ export const KO_MESSAGES: MessageCatalog = {
     "서비스가 시작되지 않았거나 인증서에 문제가 있거나 포트가 다르면 CLI 설정은 적용되지 않습니다.",
   "第二步：配置 Codex CLI 的 auth.json":
     "2단계: Codex CLI의 auth.json 설정",
-  "Codex CLI 需要从 `auth.json` 读取 API Key。这里填的是 CodexManager 平台密钥，不是账号里的 access token、refresh token 或 OpenAI 登录 token。":
-    "Codex CLI는 `auth.json`에서 API Key를 읽습니다. 여기에는 계정 access token, refresh token, OpenAI 로그인 token이 아니라 CodexManager 플랫폼 Key를 넣어야 합니다.",
+  "Codex CLI 需要从 `auth.json` 读取 API Key。这里填的是 AImanager 平台密钥，不是账号里的 access token、refresh token 或 OpenAI 登录 token。":
+    "Codex CLI는 `auth.json`에서 API Key를 읽습니다. 여기에는 계정 access token, refresh token, OpenAI 로그인 token이 아니라 AImanager 플랫폼 Key를 넣어야 합니다.",
   "先到“平台密钥”页面创建或复制一个可用 Key。":
     "먼저 플랫폼 Key 페이지에서 사용할 Key를 만들거나 복사하세요.",
   "通常放在 `~/.codex/auth.json`，和 `config.toml` 在同一个目录。":
     "보통 `~/.codex/auth.json`에 두며, `config.toml`과 같은 디렉터리입니다.",
   "在 Windows 上一般是 `%USERPROFILE%\\\\.codex\\\\auth.json`。":
     "Windows에서는 보통 `%USERPROFILE%\\\\.codex\\\\auth.json`입니다.",
-  "如果文件不存在就新建；如果已有 `OPENAI_API_KEY`，替换成 CodexManager 生成的平台 Key。":
-    "파일이 없으면 새로 만들고, 이미 `OPENAI_API_KEY`가 있다면 CodexManager가 생성한 플랫폼 Key로 교체하세요.",
+  "如果文件不存在就新建；如果已有 `OPENAI_API_KEY`，替换成 AImanager 生成的平台 Key。":
+    "파일이 없으면 새로 만들고, 이미 `OPENAI_API_KEY`가 있다면 AImanager가 생성한 플랫폼 Key로 교체하세요.",
   "第二步：把下面这份配置写入 Codex CLI 配置文件":
     "2단계: 아래 설정을 Codex CLI 설정 파일에 기록",
   "第三步：把下面这份配置写入 Codex CLI 配置文件":
@@ -1220,10 +1220,10 @@ export const KO_MESSAGES: MessageCatalog = {
     "3단계: 저장 후 Codex CLI를 다시 시작하고 provider를 확인",
   "第四步：保存后重新启动 Codex CLI 并验证 provider":
     "4단계: 저장 후 Codex CLI를 다시 시작하고 provider를 확인",
-  "最后只检查两件关键事：provider 名称一致，和 `base_url` 指向本软件的本地网关。只要这两项错一个，CLI 就不会走 CodexManager。":
-    "마지막으로 두 가지만 확인하세요. provider 이름이 정확히 일치하는지, 그리고 `base_url`이 이 앱의 로컬 게이트웨이를 가리키는지입니다. 둘 중 하나라도 틀리면 CLI는 CodexManager를 통하지 않습니다.",
-  "先确认 `auth.json` 能提供 API Key，再检查 provider 名称一致，和 `base_url` 指向本软件的本地网关。只要任意一项错了，CLI 就不会走 CodexManager。":
-    "먼저 `auth.json`이 API Key를 제공하는지 확인한 뒤 provider 이름과 `base_url`이 이 앱의 로컬 게이트웨이를 가리키는지 확인하세요. 하나라도 틀리면 CLI가 CodexManager를 거치지 않습니다.",
+  "最后只检查两件关键事：provider 名称一致，和 `base_url` 指向本软件的本地网关。只要这两项错一个，CLI 就不会走 AImanager。":
+    "마지막으로 두 가지만 확인하세요. provider 이름이 정확히 일치하는지, 그리고 `base_url`이 이 앱의 로컬 게이트웨이를 가리키는지입니다. 둘 중 하나라도 틀리면 CLI는 AImanager를 통하지 않습니다.",
+  "先确认 `auth.json` 能提供 API Key，再检查 provider 名称一致，和 `base_url` 指向本软件的本地网关。只要任意一项错了，CLI 就不会走 AImanager。":
+    "먼저 `auth.json`이 API Key를 제공하는지 확인한 뒤 provider 이름과 `base_url`이 이 앱의 로컬 게이트웨이를 가리키는지 확인하세요. 하나라도 틀리면 CLI가 AImanager를 거치지 않습니다.",
   "`auth.json` 里的 `OPENAI_API_KEY` 应填写平台密钥页面生成的 Key，不要填账号 token。":
     "`auth.json`의 `OPENAI_API_KEY`에는 플랫폼 Key 페이지에서 생성한 Key를 넣어야 하며, 계정 token을 넣으면 안 됩니다.",
   '`model_provider = "cm"` 必须和 `[model_providers.cm]` 完全一致。':
@@ -1255,8 +1255,8 @@ export const KO_MESSAGES: MessageCatalog = {
     "`auth.json`과 `config.toml`이 모두 포함되어 있으므로 파일별로 복사하거나 전체 참고 템플릿을 한 번에 복사할 수 있습니다.",
   "auth.json 示例": "auth.json 예시",
   "config.toml 示例": "config.toml 예시",
-  "这个 Key 来自 CodexManager 的“平台密钥”页面":
-    "이 Key는 CodexManager의 플랫폼 Key 페이지에서 가져옵니다",
+  "这个 Key 来自 AImanager 的“平台密钥”页面":
+    "이 Key는 AImanager의 플랫폼 Key 페이지에서 가져옵니다",
   "复制 auth.json": "auth.json 복사",
   "复制 config.toml": "config.toml 복사",
   配置片段已复制: "설정 조각이 복사되었습니다",
@@ -1320,8 +1320,8 @@ export const KO_MESSAGES: MessageCatalog = {
     "이 provider에서 웹 검색을 허용할지 여부입니다. `live`는 활성화를 뜻합니다.",
   "展示名称，可写成 OpenAI 方便识别":
     "표시 이름입니다. 식별하기 쉽게 `OpenAI`로 적어도 됩니다.",
-  "本地网关地址，默认走 CodexManager 暴露出来的 48760 端口":
-    "로컬 게이트웨이 주소입니다. 기본적으로 CodexManager가 노출한 48760 포트를 사용합니다.",
+  "本地网关地址，默认走 AImanager 暴露出来的 48760 端口":
+    "로컬 게이트웨이 주소입니다. 기본적으로 AImanager가 노출한 48760 포트를 사용합니다.",
   "与本软件网关对接时使用 responses 协议":
     "이 앱의 게이트웨이와 연결할 때는 `responses` 프로토콜을 사용합니다.",
 "个人资料已更新": "프로필이 업데이트되었습니다",
@@ -1352,7 +1352,7 @@ export const KO_MESSAGES: MessageCatalog = {
   "转发路径": "전달 경로",
   "上游模型": "업스트림 모델",
   "实际来源": "실제 소스",
-  "账号直连模式不会产生新的 CodexManager 请求日志": "계정 직결 모드에서는 새로운 CodexManager 요청 로그가 생성되지 않습니다",
+  "账号直连模式不会产生新的 AImanager 请求日志": "계정 직결 모드에서는 새로운 AImanager 요청 로그가 생성되지 않습니다",
   "这里仅展示历史网关请求；如需记录请求，请切换到本地网关模式。": "여기에는 과거 게이트웨이 요청만 표시됩니다. 요청 로그가 필요하면 로컬 게이트웨이 모드로 전환하세요.",
   "去切换为本地网关": "로컬 게이트웨이로 전환",
   "仅网关流量": "게이트웨이 트래픽만",

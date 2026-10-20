@@ -612,6 +612,14 @@ def run_session(root, session_id):
 
 def dispatch(root, request):
     action = request.get("action")
+    if action == "sessionCatalog":
+        import importlib.util
+        spec = importlib.util.spec_from_file_location("aimanager_session_history", Path(__file__).with_name("session_history.py"))
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        item = account(root, request.get("accountId"))
+        home, _ = profile_env(root, item)
+        return module.catalog(root, item, home, request.get("query", ""), request.get("limit", 100))
     if action == "analytics":
         item = account(root, request.get("accountId"))
         home, _ = profile_env(root, item)
@@ -691,6 +699,7 @@ def main():
     parser.add_argument("--root", required=True, type=Path)
     parser.add_argument("--worker")
     parser.add_argument("--run", choices=list(PROVIDERS))
+    parser.add_argument("--account-id")
     parser.add_argument("arguments", nargs=argparse.REMAINDER)
     args = parser.parse_args()
     root = args.root.resolve()
@@ -705,10 +714,12 @@ def main():
         return
     if args.run:
         with registry(root) as value:
-            account_id = value["active"].get(args.run)
+            account_id = args.account_id or value["active"].get(args.run)
         if not account_id:
             raise SystemExit("No active managed account; select one in AImanager first")
         item = account(root, account_id)
+        if item["provider"] != args.run:
+            raise SystemExit("The requested account belongs to a different CLI")
         _, env = profile_env(root, item)
         binary = native(args.run)
         forwarded = args.arguments[1:] if args.arguments[:1] == ["--"] else args.arguments

@@ -4,8 +4,8 @@ import type { MessageCatalog } from "../types";
 
 export const EN_PLATFORM_MODE_MESSAGES: MessageCatalog = {
   平台模式选择: "Platform Mode",
-  "选择 Codex CLI 直连账号，或通过 CodexManager 本地网关接入。":
-    "Choose a direct Codex CLI account connection or route through the CodexManager local gateway.",
+  "选择 Codex CLI 直连账号，或通过 AImanager 本地网关接入。":
+    "Choose a direct Codex CLI account connection or route through the AImanager local gateway.",
   写入位置说明: "Where changes are written",
   "这里修改的是 codexmanager-service 所在机器的 Codex 配置目录，不一定是当前浏览器所在机器。":
     "These changes affect the Codex profile directory on the machine running codexmanager-service, which may be different from the machine running this browser.",
@@ -25,8 +25,8 @@ export const EN_PLATFORM_MODE_MESSAGES: MessageCatalog = {
   账号直连: "Direct account",
   "OpenAI 账号": "OpenAI account",
   选择账号: "Select account",
-  "直连 OpenAI 官方后端，不经过 CodexManager 网关；不会产生 CodexManager 请求日志，仪表盘用量统计不可用。":
-    "Connect directly to the official OpenAI backend without going through the CodexManager gateway. CodexManager request logs and dashboard usage analytics will not be available.",
+  "直连 OpenAI 官方后端，不经过 AImanager 网关；不会产生 AImanager 请求日志，仪表盘用量统计不可用。":
+    "Connect directly to the official OpenAI backend without going through the AImanager gateway. AImanager request logs and dashboard usage analytics will not be available.",
   "没有可用于账号直连的 active OpenAI 账号。":
     "No active OpenAI account is available for direct account mode.",
   "去添加 OpenAI 账号": "Add OpenAI account",
@@ -35,8 +35,8 @@ export const EN_PLATFORM_MODE_MESSAGES: MessageCatalog = {
   "重新应用账号直连": "Reapply direct account",
   "切换到账号直连": "Switch to direct account",
   本地网关: "Local gateway",
-  "通过 CodexManager 本地网关转发 Codex CLI 请求；请求日志、Token、费用估算和仪表盘统计可用。":
-    "Route Codex CLI requests through the CodexManager local gateway. Request logs, tokens, cost estimates, and dashboard analytics will be available.",
+  "通过 AImanager 本地网关转发 Codex CLI 请求；请求日志、Token、费用估算和仪表盘统计可用。":
+    "Route Codex CLI requests through the AImanager local gateway. Request logs, tokens, cost estimates, and dashboard analytics will be available.",
   "没有可用于本地网关的平台密钥。":
     "No platform key is available for local gateway mode.",
   "去创建平台密钥": "Create platform key",
@@ -69,7 +69,7 @@ export const EN_PLATFORM_MODE_MESSAGES: MessageCatalog = {
   "Gateway base_url": "Gateway base_url",
   "auth.json": "auth.json",
   "config.toml": "config.toml",
-  "CodexManager 管理文件": "CodexManager managed files",
+  "AImanager 管理文件": "AImanager managed files",
   管理标记: "Management marker",
   可写: "Writable",
   是: "Yes",
@@ -89,8 +89,8 @@ export const EN_PLATFORM_MODE_MESSAGES: MessageCatalog = {
   备份目录: "Backup directory",
   警告: "Warning",
   "历史修复备份": "History repair backups",
-  "备份保存在 CodexManager 数据目录，不再写入 Codex profile。":
-    "Backups are stored in the CodexManager data directory and are no longer written into the Codex profile.",
+  "备份保存在 AImanager 数据目录，不再写入 Codex profile。":
+    "Backups are stored in the AImanager data directory and are no longer written into the Codex profile.",
   "清理历史备份": "Clean history backups",
   "数量 / 占用": "Count / size",
   保留策略: "Retention policy",

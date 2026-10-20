@@ -342,7 +342,12 @@ async function mockConsoleApi(
       "labcontext/overview": labContextOverview,
       "labcontext/getResearchMap": researchMapBundle,
     };
-    const result = body.method === "aiAccounts/action" && body.params?.action === "analytics" ? {
+    const result = body.method === "aiAccounts/action" && body.params?.action === "sessionCatalog" ? {
+      accountId: body.params.accountId, provider: body.params.accountId === "claude-a" ? "claude" : "antigravity",
+      total: body.params.accountId === "claude-a" && !body.params.query ? 1 : 0,
+      items: body.params.accountId === "claude-a" && !body.params.query ? [{ id:"12345678-1234-4321-abcd-123456789abc",title:"Claude session demo",cwd:"/workspace/demo",updatedAtMs:1792491282000,source:"claude_jsonl",cwdExists:true,visibility:"ready",resumeCommand:"aimanager-cli claude --account-id claude-a -- --resume 12345678-1234-4321-abcd-123456789abc" }] : [],
+      coverage:{filesScanned:1,partial:false}, checkedAt:1792491282, continueCommand:`aimanager-cli ${body.params.accountId === "claude-a" ? "claude" : "antigravity"} --account-id ${body.params.accountId} -- --continue`,note:"本地账号会话索引"
+    } : body.method === "aiAccounts/action" && body.params?.action === "analytics" ? {
       accountId:body.params.accountId, provider:body.params.accountId === "claude-a" ? "claude" : "antigravity",
       days:body.params.accountId === "claude-a" ? [{date:body.params.startDate,capturedAt:Math.floor(Date.now()/1000),totals:{credits:null,turns:3,uncachedInputTokens:100,cachedInputTokens:50,outputTokens:20,totalTokens:170}}] : [],
       quotaHistory:[{capturedAt:Math.floor(Date.now()/1000),windows:[{label:"5 小时额度",remainingPercent:82,resetsAt:null}]}],
@@ -490,4 +495,24 @@ test("active accounts lead, web quota preserves unknowns, and CLI analytics swit
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
   expect(methods).toContain("aiConnections/quota");
   expect(errors).toEqual([]);
+});
+
+
+test("sessions switch across three CLIs with pinned recovery and honest empty state", async ({ page }) => {
+  await mockConsoleApi(page);
+  await page.goto("/sessions/");
+  await expect(page.getByText("Session Demo", { exact: true }).first()).toBeVisible();
+  await page.getByRole("tab", { name: "Claude Code" }).click();
+  await expect(page.getByText("Claude session demo", { exact: true }).first()).toBeVisible();
+  await expect(page.getByRole("combobox", { name: "Claude Code 会话账号" })).toHaveValue("claude-a");
+  await expect(page.locator("code").filter({hasText:"--resume"})).toContainText("--account-id claude-a");
+  await page.getByRole("textbox", {name:"Claude Code 搜索会话"}).fill("no-match");
+  await page.getByRole("button", {name:"搜索会话",exact:true}).click();
+  await expect(page.getByText("没有匹配的会话，请尝试其他关键词。")).toBeVisible();
+  await page.getByRole("tab", { name: "Antigravity" }).click();
+  await expect(page.getByText("此账号暂无已保存的会话。")).toBeVisible();
+  await expect(page.locator("code").filter({hasText:"--continue"})).toContainText("--account-id agy-a");
+  await expect(page.locator("body")).not.toContainText("CodexManager");
+  await page.setViewportSize({width:390,height:844});
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBeTruthy();
 });

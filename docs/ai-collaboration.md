@@ -1,6 +1,6 @@
 # 按模型名协作
 
-`ai-collab` 为 Codex 提供小型协作执行层：Claude 使用 AIManager 当前选择的
+`ai-collab` 为 Codex 提供小型协作执行层：Claude 使用 AImanager 当前选择的
 官方 CLI OAuth 配置，Gemini 使用已有网页反代。配套
 `skills/multi-model-collaboration/SKILL.md` 负责自然语言触发与任务交接。
 
@@ -36,7 +36,7 @@ ai-collab result JOB_ID
 
 默认配置路径 `~/.config/ai-collab/config.json`；可用 `AI_COLLAB_CONFIG` 覆盖。
 任务保存在 `~/.local/state/ai-collab/`，可用 `AI_COLLAB_STATE_DIR` 覆盖。
-初次 `init --proxy URL` 可指定现有 Claude 出站代理；不改写系统代理或 AIManager 配置。
+初次 `init --proxy URL` 可指定现有 Claude 出站代理；不改写系统代理或 AImanager 配置。
 Gemini 凭据从已有 `~/.config/gemini-web-client/client.env` 读取，环境变量
 `GEMINI_WEB_BASE_URL`、`GEMINI_WEB_API_KEY` 优先。不会在协作配置中复制 token。
 支持 HTTPS 端点以及 loopback HTTP，拒绝携带凭据跳转。
