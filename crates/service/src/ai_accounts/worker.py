@@ -362,21 +362,36 @@ def quota_windows(text):
     # Never add unlike limits together or reinterpret unknown values as zero.
     lines = [line.strip() for line in strip_terminal(text).splitlines() if line.strip()]
     result = []
+    group = ""
     for index, line in enumerate(lines):
+        group_heading = re.search(r"\b(GEMINI MODELS|CLAUDE AND GPT MODELS)\b", line)
+        if group_heading:
+            group = group_heading.group(1).title()
+            continue
         match = re.search(r"(?<![\d.])(\d{1,3}(?:\.\d+)?)\s*%\s*(used|remaining|left)", line, re.I)
+        heading = ""
+        if not match and index:
+            # Antigravity 1.4 places direction above the progress bar.
+            # Accept only its explicit headings, never an unlabelled percentage.
+            heading = lines[index - 1]
+            if re.fullmatch(r"(?:Weekly|Five Hour) Limit Remaining", heading, re.I):
+                match = re.fullmatch(r"[\s\[\]█░▒▓▏▎▍▌▋▊▉━─]*(\d{1,3}(?:\.\d+)?)\s*%", line)
         if not match:
             continue
         amount = float(match.group(1))
         if not 0 <= amount <= 100:
             continue
         prefix = re.sub(r"[█░▒▓▏▎▍▌▋▊▉━─│┃┌┐└┘]", "", line[:match.start()]).strip()
-        label = prefix or (lines[index - 1] if index else "Quota window")
+        if heading:
+            label = group + " / " + heading if group else heading
+        else:
+            label = prefix or (lines[index - 1] if index else "Quota window")
         if "@" in label or KEYS.search(label):
             label = "Quota window"
         label = re.sub(r"[^\w ()/.:+-]", "", label)[:100]
         if not label or "@" in label or KEYS.search(label):
             label = "Quota window"
-        used = amount if match.group(2).lower() == "used" else 100 - amount
+        used = amount if not heading and match.group(2).lower() == "used" else 100 - amount
         entry = {"label": label, "usedPercent": round(used, 2), "remainingPercent": round(100 - used, 2), "resetsAt": None}
         if entry not in result:
             result.append(entry)
@@ -499,9 +514,15 @@ def run_session(root, session_id):
                         publish("reading_usage", "Reading the official /usage panel; no model prompt is submitted")
                 if sent_usage and quota_windows(plain):
                     windows = quota_windows(plain)
-                    update_account(root, item["id"], quota={"state": "available", "source": "official_cli_usage", "checkedAt": int(time.time()), "windows": windows})
-                    publish("succeeded", "Official quota snapshot refreshed")
-                    return
+                    # The grouped panel may arrive in several PTY reads.
+                    grouped = item["provider"] == "antigravity" and "GEMINI MODELS" in plain
+                    if not grouped or len(windows) >= 4:
+                        quota = {"state": "available", "source": "official_cli_usage", "checkedAt": int(time.time()), "windows": windows}
+                        if re.search(r"not.*available in your location", plain, re.I | re.S):
+                            quota.update(note="官方额度可读取，但 CLI 提示当前地区不可用；额度不代表调用资格。", reasonCode="location_not_supported")
+                        update_account(root, item["id"], quota=quota)
+                        publish("succeeded", "Official quota snapshot refreshed")
+                        return
                 if confirmation_prompt(plain):
                     publish("needs_confirmation", "The official CLI is waiting for Enter before displaying usage")
             mailbox = directory / "input.json"

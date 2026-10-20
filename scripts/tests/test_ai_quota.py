@@ -13,6 +13,28 @@ worker = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(worker)
 
 class QuotaTest(unittest.TestCase):
+    def test_antigravity_grouped_progress_bars_preserve_separate_windows(self):
+        panel = (
+            "└ Models & Quota   GEMINI MODELS\nModels within this group: Gemini Flash, Gemini Pro\n"
+            "\x1b[1mWeekly Limit Remaining\x1b[m\n"
+            "\x1b[20D[████░░]\x1b[2m 74.26%\x1b[m\nRefreshes in 81h 53m\n"
+            "Five Hour Limit Remaining\n[██████] 100.00%\nQuota available\n"
+            "CLAUDE AND GPT MODELS\n"
+            "Weekly Limit Remaining\n[██████] 100.00%\nQuota available\n"
+            "Five Hour Limit Remaining\n[██████] 100.00%\nQuota available\n"
+        )
+        windows = worker.quota_windows(panel)
+        self.assertEqual([w["remainingPercent"] for w in windows], [74.26, 100, 100, 100])
+        self.assertEqual(windows[0]["usedPercent"], 25.74)
+        self.assertEqual(len({w["label"] for w in windows}), 4)
+        self.assertTrue(windows[0]["label"].startswith("Gemini Models /"))
+        self.assertTrue(windows[2]["label"].startswith("Claude And Gpt Models /"))
+
+    def test_progress_bar_requires_an_explicit_direction_and_valid_value(self):
+        for panel in ["Unknown\n[████] 80%", "Weekly Limit Remaining\n[████] 101%",
+                      "Weekly Limit Remaining\nSome other metric 80%"]:
+            self.assertEqual(worker.quota_windows(panel), [])
+
     def test_null_invalid_and_boolean_values_are_not_zero(self):
         self.assertEqual(worker.claude_quota_windows({"five_hour": None, "seven_day": {"utilization": True}, "seven_day_opus": {"utilization": -1}}), [])
         self.assertEqual(worker.claude_quota_windows({"five_hour": {"utilization": float('nan')}}), [])

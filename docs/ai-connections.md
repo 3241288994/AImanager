@@ -112,6 +112,7 @@ aimanager-cli antigravity -- <Antigravity 参数>
 - 额度刷新失败保留上次成功快照，显示本次失败原因，不能将未知值显示为零或已恢复。
 - Claude 读取原生 CLI 使用的只读 OAuth usage 接口；此上游接口可能变化，401/403 需要重新验证官方授权，不会在管理端静默复制或改写 token。
 - Antigravity 读取官方 `/usage` 面板。首次主题、登录、条款与数据使用选项需要在官方 CLI 完成；不会自动接受数据收集选项，不提交模型生成请求。
+- Antigravity 1.4 的分组额度分别保留 Gemini 与 Claude/GPT 的周额度和五小时额度，不合并同名窗口；只识别明确标注剩余方向的进度条。官方同时提示地区不可用时仍展示额度快照及限制说明，额度可读取不代表模型具备调用资格。
 - Antigravity 模型通过 `agy models` 获取；Claude 仅展示官方缓存中未禁用的额外模型选项，明确标记不是完整模型列表。Codex 显示官方来源的服务模型目录，可能使用缓存，并非逐账号授权验证。API 入口读取上游 `/v1/models`，不会将健康状态当成额度。
 - 托管 CLI 和后台 worker 继承 HTTP_PROXY / HTTPS_PROXY / ALL_PROXY 与 NO_PROXY 及其小写形式。需要 SSH 反向代理时，在服务环境和命令启动环境配置同一地址，不要把端口写死到公共源码。
 
