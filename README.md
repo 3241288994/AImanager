@@ -9,7 +9,7 @@ AImanager（原 CodexManager）保留已有 Codex 账号、额度、会话与 La
 网页账号池等私有 Chat Completions API 的配置、启停检测和模型目录探测。
 CLI 安装不等于已登录；API 目录可达不等于生成成功。当前不会自动迁移或复用第三方项目的 OAuth token。
 
-[AI 接入与更名兼容说明](docs/ai-connections.md) · **贴一个路径，让 ChatGPT 读懂你的本机和服务器项目。**
+[AI 接入与更名兼容说明](docs/ai-connections.md) · [按模型名协作](docs/ai-collaboration.md) · **贴一个路径，让 ChatGPT 读懂你的本机和服务器项目。**
 
 <p align="center">
   <a href="https://github.com/3241288994/codexmanager/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/3241288994/codexmanager/actions/workflows/ci.yml/badge.svg" /></a>
