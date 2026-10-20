@@ -21,7 +21,7 @@ async function routeDirectories(root, relative = "") {
 
 test("the public console exposes only its maintained top-level routes", async () => {
   const routes = (await routeDirectories(path.join(appsRoot, "src", "app"))).sort();
-  assert.deepEqual(routes, ["analytics", "labcontext", "sessions"]);
+  assert.deepEqual(routes, ["analytics", "connections", "labcontext", "sessions"]);
 
   const rootPage = path.join(appsRoot, "src", "app", "page.tsx");
   await fs.access(rootPage);
@@ -29,7 +29,7 @@ test("the public console exposes only its maintained top-level routes", async ()
     path.join(appsRoot, "src", "components", "layout", "sidebar.tsx"),
     "utf8",
   );
-  for (const href of ['href: "/"', 'href: "/analytics"', 'href: "/sessions"', 'href: "/labcontext"']) {
+  for (const href of ['href: "/"', 'href: "/connections"', 'href: "/analytics"', 'href: "/sessions"', 'href: "/labcontext"']) {
     assert.match(sidebar, new RegExp(href.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
   }
 });

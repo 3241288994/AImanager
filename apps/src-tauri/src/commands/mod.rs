@@ -1,6 +1,7 @@
 #![allow(dead_code)]
 
 pub mod account;
+pub mod ai_connections;
 pub mod account_manager;
 pub mod aggregate_api;
 pub mod apikey;

@@ -10,6 +10,7 @@ const appsRoot = path.resolve(import.meta.dirname, "..");
 const sourcePath = path.join(appsRoot, "src", "lib", "api", "transport-web-commands.ts");
 const commandModuleNames = [
   "account",
+  "ai-connections",
   "codex-profile",
   "labcontext",
   "login",
@@ -63,6 +64,27 @@ async function loadTransportWebCommandsModule() {
 
 const transportWebCommands = await loadTransportWebCommandsModule();
 const commandMap = transportWebCommands.createWebCommandMap();
+
+test("AI connection commands preserve service-host configuration without secret payloads", () => {
+  assert.equal(commandMap.service_ai_connections_list.rpcMethod, "aiConnections/list");
+  assert.equal(commandMap.service_ai_connections_probe.rpcMethod, "aiConnections/probe");
+  assert.equal(commandMap.service_ai_connections_delete.rpcMethod, "aiConnections/delete");
+  const connection = { id: "gemini-web", name: "Gemini", baseUrl: "http://127.0.0.1:16969/v1", enabled: true, credentialSource: "gemini-web-client" };
+  assert.deepEqual(commandMap.service_ai_connections_save.mapParams({ addr: "localhost:48760", connection }), connection);
+});
+
+test("managed OAuth links accept current Claude manual flow but never callback secrets", async () => {
+  const source = await fs.readFile(path.join(appsRoot, "src/lib/api/ai-accounts-client.ts"), "utf8");
+  const compiled = ts.transpileModule(source.replace(/^import .* from "\.\/transport";\s*/m, ""), {
+    compilerOptions: { module: ts.ModuleKind.ES2022, target: ts.ScriptTarget.ES2022 },
+  });
+  const { officialAuthUrl } = await import(`data:text/javascript;base64,${Buffer.from(compiled.outputText).toString("base64")}`);
+  const valid = "https://claude.com/cai/oauth/authorize?code=true&state=test";
+  assert.equal(officialAuthUrl(valid), valid);
+  for (const url of ["http://claude.com/oauth", "https://claude.com.evil.example/oauth", "https://user:pass@claude.com/oauth", "https://claude.com/oauth/authorize?code=secret", "https://claude.com/oauth/callback?code=true", "https://accounts.google.com/oauth#access_token=secret", "https://claude.ai/oauth?refresh_token=secret"]) {
+    assert.equal(officialAuthUrl(url), null);
+  }
+});
 
 test("current account and session commands have Web RPC mappings", () => {
   assert.deepEqual(commandMap.service_initialize, { rpcMethod: "initialize" });

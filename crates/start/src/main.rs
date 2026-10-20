@@ -587,7 +587,7 @@ fn main() {
         }
     };
 
-    println!("CodexManager 启动器");
+    println!("AImanager 启动器");
     println!("- service: {service_addr} (bind {service_bind_addr})");
     if web_open_addr == web_addr {
         println!("- web:     http://{web_addr}/");

@@ -228,6 +228,13 @@ async function mockConsoleApi(
     const body = JSON.parse(request.postData() || "{}");
     methods.push(body.method);
     const responses: Record<string, unknown> = {
+      "aiAccounts/action": { items: [], summary: { accounts: 0, authenticated: 0, quotaKnown: 0 } },
+      "aiConnections/list": {
+        host: "linux",
+        cli: [{ id: "claude", name: "Claude Code", installed: true, command: "claude auth login", authStatus: "not_checked" }, { id: "antigravity", name: "Antigravity", installed: false, command: "agy", authStatus: "not_checked" }],
+        items: [{ id: "gemini-web", name: "Gemini 网页账号池", baseUrl: "http://127.0.0.1:16969/v1", credentialSource: "gemini-web-client", enabled: true }],
+      },
+      "aiConnections/probe": { id: "gemini-web", status: "reachable", latencyMs: 12, models: ["gemini-argon", "gemini-flash-lite"], health: "reachable", healthSummary: { readyAccounts: 1, accounts: [{ index: 1, status: "ready", cooldownSeconds: 0 }, { index: 2, status: "cooldown", cooldownSeconds: 90 }] }, generationVerified: false, note: "未发送生成请求，不消耗模型额度。" },
       "appSettings/get": settings,
       initialize: {
         userAgent: "codex_cli_rs/0.1.0",
@@ -344,6 +351,100 @@ async function mockConsoleApi(
   return methods;
 }
 
+test("managed CLI accounts complete browser handoff, selection and official quota refresh", async ({ page }) => {
+  await mockConsoleApi(page);
+  const item = { id: "a".repeat(32), provider: "claude", label: "Research Claude", active: false, authStatus: "unknown", quota: { state: "unknown", windows: [] as unknown[] } };
+  let created = false;
+  let complete = false;
+  let usage = false;
+  await page.route("**/api/rpc", async route => {
+    const body = route.request().postDataJSON();
+    if (body.method !== "aiAccounts/action") { await route.fallback(); return; }
+    const params = body.params;
+    const auth = { id: "b".repeat(32), accountId: item.id, kind: usage ? "usage" : "login", phase: usage || complete ? "succeeded" : "awaiting_code", authorizationUrl: "https://claude.com/cai/oauth/authorize?code=true&client_id=test&state=test", message: "Official CLI test handoff", startedAt: 1, updatedAt: 1 };
+    let result: unknown;
+    if (params.action === "connect") { created = true; result = auth; }
+    else if (["list", "sync"].includes(params.action)) result = { items: created ? [item] : [], summary: { accounts: created ? 1 : 0, authenticated: complete ? 1 : 0, quotaKnown: usage ? 1 : 0 } };
+    else if (params.action === "input") { expect(params.code).toBe("dummy-return-code"); complete = true; item.authStatus = "authenticated"; result = { ...auth, phase: "verifying" }; }
+    else if (params.action === "select") { item.active = true; result = { activeAccountId: item.id, note: "New tasks only" }; }
+    else if (params.action === "usage") { usage = true; item.quota = { state: "available", windows: [{ label: "Current session", usedPercent: 20, remainingPercent: 80, resetsAt: null }] }; result = { ...auth, kind: "usage", phase: "succeeded" }; }
+    else result = auth;
+    await route.fulfill({ contentType: "application/json", body: JSON.stringify({ jsonrpc: "2.0", id: body.id, result }) });
+  });
+  await page.goto("/#claude");
+  await page.getByRole("button", { name: "登录 Claude Code", exact: true }).click();
+  await expect(page.getByRole("link", { name: "打开官方授权页面" })).toHaveAttribute("href", /https:\/\/claude\.com\/cai\/oauth\/authorize\?code=true/);
+  await page.getByLabel("官方授权返回码", { exact: true }).fill("dummy-return-code");
+  await page.getByRole("button", { name: "提交返回码" }).click();
+  await expect(page.getByText("已完成同步", { exact: true })).toBeVisible();
+  await expect(page.getByLabel("官方授权返回码", { exact: true })).toHaveCount(0);
+  await page.getByRole("button", { name: "关闭结果", exact: true }).click();
+  await expect(page.getByText("已登录", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "设为默认", exact: true }).click();
+  await expect(page.getByRole("button", { name: "当前默认", exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "刷新官方额度", exact: true }).click();
+  await expect(page.getByText("已完成同步", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "关闭结果", exact: true }).click();
+  await expect(page.getByText("剩余 80%", { exact: true })).toBeVisible();
+});
+
+test("AI connection center distinguishes CLI installation from auth and probes private model catalogs", async ({ page }) => {
+  const methods = await mockConsoleApi(page);
+  await page.goto("/connections/");
+  await expect(page).toHaveTitle("AImanager");
+  await expect(page.getByText("AI 接入中心", { exact: true })).toBeVisible();
+  await expect(page.locator('[data-slot="card-title"]').filter({ hasText: "Claude Code" })).toBeVisible();
+  await expect(page.getByText("登录状态：尚未验证")).toHaveCount(0);
+  await expect(page.getByLabel("账号备注", { exact: true })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "添加独立账号", exact: true })).toHaveCount(0);
+  await page.getByRole("button", { name: "检测连接与模型" }).click();
+  await expect(page.getByText("gemini-argon", { exact: true })).toBeVisible();
+  await expect(page.getByText("未发送生成请求，不消耗模型额度。", { exact: true })).toBeVisible();
+  await expect(page.getByText("上游报告可用账号：1", { exact: true })).toBeVisible();
+  await expect(page.getByText("账号 2 · 冷却中 · 冷却 90s", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "编辑", exact: true }).click();
+  await expect(page.getByLabel("服务主机 API 地址")).toHaveValue("http://127.0.0.1:16969/v1");
+  await expect(page.locator("input[type=password]")).toHaveCount(0);
+  await page.screenshot({ path: "test-results/ai-connections.png", fullPage: true });
+  expect(methods).toContain("aiConnections/list");
+  expect(methods).toContain("aiConnections/probe");
+});
+
+test("saved logins synchronize across connection and account views without recreating profiles", async ({ page }) => {
+  await mockConsoleApi(page);
+  let signedIn = false;
+  const actions: string[] = [];
+  await page.route("**/api/rpc", async route => {
+    const body = route.request().postDataJSON();
+    if (body.method !== "aiAccounts/action") { await route.fallback(); return; }
+    actions.push(body.params.action);
+    const items = ["claude", "antigravity"].map((provider, index) => ({
+      id: (index ? "c" : "a").repeat(32), provider, label: index ? "Antigravity 科研账号" : "Claude 个人会员", authStatus: signedIn ? "authenticated" : "unknown", active: false, checkedAt: Math.floor(Date.now() / 1000), quota: { state: "unknown", windows: [] },
+    }));
+    await route.fulfill({ contentType: "application/json", body: JSON.stringify({ jsonrpc: "2.0", id: body.id, result: { items, summary: { accounts: 2, authenticated: signedIn ? 2 : 0, quotaKnown: 0 } } }) });
+  });
+  await page.goto("/connections/");
+  await expect(page.getByText("待同步", { exact: true })).toHaveCount(2);
+  signedIn = true;
+  await page.getByRole("button", { name: "同步登录状态", exact: true }).click();
+  await expect(page.getByText("已登录", { exact: true })).toHaveCount(2);
+  await expect(page.getByLabel("账号备注", { exact: true })).toHaveCount(0);
+  await page.getByRole("link", { name: "管理 Codex 账号与所有平台额度" }).click();
+  await page.getByRole("tab", { name: /Claude Code/ }).click();
+  await expect(page.getByText("Claude 个人会员", { exact: true })).toBeVisible();
+  await expect(page.getByText("额度尚未同步", { exact: true })).toBeVisible();
+  await page.screenshot({ path: "test-results/ai-accounts-desktop.png", fullPage: true });
+  await page.getByRole("tab", { name: /Antigravity/ }).click();
+  await expect(page.getByText("Antigravity 科研账号", { exact: true })).toBeVisible();
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect(page.locator("aside")).toHaveCSS("width", "56px");
+  await expect(page.getByRole("tab", { name: /Antigravity/ })).toBeVisible();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+  await page.screenshot({ path: "test-results/ai-accounts-mobile.png", fullPage: true });
+  expect(actions).not.toContain("connect");
+  expect(actions).not.toContain("create");
+});
+
 test("the maintained account, analytics, session, and LabContext routes load through Web RPC", async ({ page }) => {
   const methods = await mockConsoleApi(page);
 
@@ -353,7 +454,7 @@ test("the maintained account, analytics, session, and LabContext routes load thr
   await expect(page.getByText("服务已连接", { exact: true })).toBeVisible();
 
   await page.getByRole("link", { name: "用量分析" }).click();
-  await expect(page.getByRole("heading", { name: "用量分析" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "用量分析", level: 2 })).toBeVisible();
   await expect(page.getByTestId("usage-chart")).toBeVisible();
 
   await page.getByRole("link", { name: "会话与恢复" }).click();
