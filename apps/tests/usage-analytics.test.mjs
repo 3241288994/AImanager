@@ -37,3 +37,12 @@ test("CSV retains zeros, missing values, estimates and source without auth", () 
   assert.match(csv, /"2026-01-01","0","90","10","0","100","","0.1",""/);
   assert.equal(offsetDate("2026-03-01", -1), "2026-02-28");
 });
+
+const orderSource = await fs.readFile(new URL("../src/lib/account-order.ts", import.meta.url), "utf8");
+const orderCompiled = ts.transpileModule(orderSource, { compilerOptions: { module: ts.ModuleKind.ES2022, target: ts.ScriptTarget.ES2022 } }).outputText;
+const { activeFirst } = await import(`data:text/javascript;base64,${Buffer.from(orderCompiled).toString("base64")}`);
+test("active accounts sort first without mutating cached data or backup order", () => {
+  const input = [{id:"backup-a", active:false}, {id:"current", active:true}, {id:"backup-b", active:false}];
+  assert.deepEqual(activeFirst(input, item => item.active).map(item => item.id), ["current", "backup-a", "backup-b"]);
+  assert.equal(input[0].id, "backup-a");
+});

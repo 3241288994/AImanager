@@ -1,6 +1,14 @@
 # 用量分析
 
-入口：侧边栏「用量分析」（`/analytics/`）。按账号工作区查询 Credits、未缓存输入、缓存输入、输出、总 Tokens 和交互轮数，支持日期筛选、趋势图及 JSON / CSV 导出。
+入口：侧边栏「用量分析」（`/analytics/`），仅包含 Codex、Claude Code、Antigravity 三个 CLI，可切换平台与账号。网页账号池额度位于「账号与额度」。
+
+- Codex：保留官方账号工作区的每日 Credits、Tokens、交互轮数与参考金额，支持 JSON / CSV。
+- Claude Code：解析服务主机上该托管账号 `.claude/projects` 中已保存的 JSONL；按消息 ID 去重流式片段及重复日志，缓存写入计入未缓存输入，缓存读取单列。统计的是模型回复次数，不称作用户轮数。未保存的会话不计入，也不代表其他设备的总使用量。不导出对话内容，不推算账单。
+- Claude Code / Antigravity：保留官方剩余额度的每日最新快照（UTC，最多 366 天），独立显示各窗口与重置时间。重置后的百分比变化不能推算成消耗量。Antigravity 缺少可靠逐日 Tokens 数据时明确说明，不补零、不伪造趋势。
+
+新增 `aiAccounts/action` 的 `analytics` 操作，参数 `accountId/startDate/endDate`（结束日期不含），沿用管理员权限。历史保存在私有 `AIMANAGER_STATE_DIR/usage-history/<accountId>.json`，不修改 SQLite schema。首次读取会保留已有的成功额度快照；后续成功刷新持续更新。
+
+Claude 日志读取上限：1000 个文件、64 MiB 总量、单行 1 MiB、8 秒；跳过软链接，目录最多向下三层。达到上限时展示「部分统计」，不声称完整覆盖。所选范围最多 366 天，报告只返回数值与来源元数据。
 
 ## 页面展示
 

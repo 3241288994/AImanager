@@ -45,3 +45,8 @@ pub async fn service_ai_connections_probe(
     )
     .await
 }
+
+#[tauri::command]
+pub async fn service_ai_connections_quota(addr: Option<String>, id: String) -> Result<serde_json::Value, String> {
+    rpc_call_in_background("aiConnections/quota", addr, Some(serde_json::json!({"id":id}))).await
+}

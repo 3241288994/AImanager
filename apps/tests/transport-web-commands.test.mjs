@@ -133,5 +133,6 @@ test("removed product surfaces are not accidentally exposed through the Web comm
 test("model catalog and managed account requests retain their Web RPC contract", () => {
  assert.equal(commandMap.service_model_catalog_list.rpcMethod, "apikey/modelCatalogList");
  assert.equal(commandMap.service_ai_accounts_action.rpcMethod, "aiAccounts/action");
+ assert.equal(commandMap.service_ai_connections_quota.rpcMethod, "aiConnections/quota");
  assert.deepEqual(commandMap.service_ai_accounts_action.mapParams({ params: { action: "models", accountId: "account" } }), { action: "models", accountId: "account" });
 });

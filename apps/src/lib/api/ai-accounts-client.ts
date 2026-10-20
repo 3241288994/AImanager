@@ -1,9 +1,7 @@
+import type { AnalyticsDay } from "./usage-analytics-client";
 import { invoke, withAddr } from "./transport";
 
 export type AiProvider = "claude" | "antigravity";
-export interface AiModelSnapshot {
-  state: "available" | "unavailable"; items: { id: string; name: string }[]; source?: string; checkedAt?: number; note?: string; lastError?: string;
-}
 export interface ManagedAiAccount {
   id: string;
   provider: AiProvider;
@@ -13,7 +11,6 @@ export interface ManagedAiAccount {
   authMethod?: string;
   authNote?: string;
   checkedAt?: number;
-  models?: AiModelSnapshot;
   quota: { lastError?: string; lastAttemptAt?: number; reasonCode?: string; state: "unknown" | "available" | "unavailable"; source?: string; checkedAt?: number; note?: string;
     windows: { label: string; usedPercent: number; remainingPercent: number; resetsAt: string | null }[] };
 }
@@ -46,8 +43,14 @@ export function officialAuthUrl(value: string | null): string | null {
 function action<T>(params: Record<string, unknown>): Promise<T> {
   return invoke<T>("service_ai_accounts_action", withAddr({ params }), { timeoutMs: 30_000 });
 }
+export interface CliAnalyticsReport {
+  accountId: string; provider: AiProvider; source: string; startDate: string; endDate: string;
+  days: AnalyticsDay[]; checkedAt: number; note: string;
+  coverage: { filesScanned: number; partial: boolean };
+  quotaHistory: { capturedAt: number; windows: { label: string; remainingPercent: number; resetsAt: string | null }[] }[];
+}
 export const aiAccountsClient = {
-  models: (accountId: string) => action<AiModelSnapshot>({ action: "models", accountId }),
+  analytics: (accountId: string, startDate: string, endDate: string) => action<CliAnalyticsReport>({ action: "analytics", accountId, startDate, endDate }),
   list: () => action<AiAccountList>({ action: "list" }),
   sync: (force = false) => action<AiAccountList>({ action: "sync", force }),
   connect: (provider: AiProvider) => action<AiAuthSession>({ action: "connect", provider }),

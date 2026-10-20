@@ -10,7 +10,7 @@ import { aiAccountsClient, type AiProvider, type ManagedAiAccount } from "@/lib/
 import { getAppErrorMessage } from "@/lib/api/transport";
 import { useManagedAiAccounts, useManagedCliSession } from "@/hooks/useManagedAiAccounts";
 import { CliAuthorizationDialog } from "./cli-authorization-dialog";
-import { AccountModels } from "./account-models";
+import { activeFirst } from "@/lib/account-order";
 
 export const AI_PLATFORMS = {
   claude: { name: "Claude Code", icon: Sparkles, tint: "bg-amber-500/10 text-amber-700 dark:text-amber-300" },
@@ -57,7 +57,7 @@ export function ManagedCliAccounts({ provider, view = "connections" }: { provide
   const login = (id: string) => void auth.run(async () => auth.start(await aiAccountsClient.login(id)));
   const usage = (id: string) => void auth.run(async () => auth.start(await aiAccountsClient.usage(id)));
 
-  return <section className="space-y-4" aria-label={compact ? "官方账号管理" : "官方额度与模型"}>
+  return <section className="space-y-4" aria-label={compact ? "官方账号管理" : "官方账号额度"}>
     {!provider ? <div className="flex flex-wrap items-center justify-between gap-3">
       <div><h3 className="font-semibold">官方账号连接</h3><p className="mt-1 text-xs text-muted-foreground">登录状态自动同步，凭证仅保留在服务主机。</p></div>
       <div className="flex gap-2">
@@ -71,7 +71,7 @@ export function ManagedCliAccounts({ provider, view = "connections" }: { provide
       {platforms.map(platform => {
         const meta = AI_PLATFORMS[platform];
         const Icon = meta.icon;
-        const items = accounts.data?.items.filter(item => item.provider === platform) ?? [];
+        const items = activeFirst(accounts.data?.items.filter(item => item.provider === platform) ?? [], item => item.active);
         const connected = items.filter(item => item.authStatus === "authenticated").length;
         return <Card key={platform} className="glass-card overflow-hidden rounded-2xl border-border/70" aria-label={`${meta.name} 账号`}>
           <CardHeader className="pb-4">
@@ -84,13 +84,13 @@ export function ManagedCliAccounts({ provider, view = "connections" }: { provide
             </div>
           </CardHeader>
           <CardContent className="space-y-4">
-            {items.length ? items.map(account => <div key={account.id} className={`space-y-4 rounded-xl border border-border/60 bg-background/35 ${compact ? "p-4" : "p-5"}`}>
+            {items.length ? items.map(account => <div key={account.id} className={`space-y-4 rounded-xl border ${account.active ? "border-emerald-500/50 bg-emerald-500/[0.045] ring-1 ring-emerald-500/15" : "border-border/60 bg-background/35"} ${compact ? "p-4" : "p-5"}`}>
               <div className="flex flex-wrap items-start justify-between gap-3">
-                <div className="min-w-0"><p className="truncate text-sm font-medium">{account.label}</p><p className="mt-1 text-xs text-muted-foreground">{checkedTime(account.checkedAt)}{account.active ? " · 新任务默认账号" : ""}</p></div>
+                <div className="min-w-0"><div className="flex flex-wrap items-center gap-2"><p className="truncate text-sm font-medium">{account.label}</p>{account.active ? <Badge className="bg-emerald-600 text-white"><CheckCircle2 className="size-3" />当前默认</Badge> : null}</div><p className="mt-1 text-xs text-muted-foreground">{checkedTime(account.checkedAt)}{account.active ? " · 新任务默认账号" : ""}</p></div>
                 <Badge variant="outline" className={account.authStatus === "authenticated" ? "border-emerald-500/20 bg-emerald-500/5 text-emerald-700 dark:text-emerald-300" : "text-muted-foreground"}>{account.authStatus === "authenticated" ? <><CheckCircle2 className="size-3" />已登录</> : account.authStatus === "signed_out" ? "未登录" : "待同步"}</Badge>
               </div>
               {!compact && account.authNote ? <p className="text-xs leading-relaxed text-muted-foreground">{account.authNote}</p> : null}
-              {!compact ? <><QuotaSnapshot account={account} /><AccountModels account={account} /></> : null}
+              {!compact ? <QuotaSnapshot account={account} /> : null}
               <div className="flex flex-wrap items-center gap-2">
                 {account.authStatus === "authenticated" ? <>
                   {compact ? <Button size="sm" variant={account.active ? "secondary" : "outline"} disabled={auth.busy || account.active} onClick={() => void auth.run(async () => { await aiAccountsClient.select(account.id); toast.success("默认账号已切换，仅影响新启动的托管 CLI"); })}>{account.active ? "当前默认" : "设为默认"}</Button> : null}

@@ -6,6 +6,7 @@ export function createAiConnectionsWebCommands(): Record<string, WebCommandDescr
     service_ai_connections_list: { rpcMethod: "aiConnections/list" },
     service_ai_connections_save: { rpcMethod: "aiConnections/save", mapParams: p => p?.connection as Record<string, unknown> },
     service_ai_connections_delete: { rpcMethod: "aiConnections/delete" },
+    service_ai_connections_quota: { rpcMethod: "aiConnections/quota" },
     service_ai_connections_probe: { rpcMethod: "aiConnections/probe" },
   };
 }

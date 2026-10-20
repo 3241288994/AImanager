@@ -1,5 +1,7 @@
 "use client";
 
+import { activeFirst } from "@/lib/account-order";
+
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AlertTriangle, CheckCircle2, Clock3, ExternalLink, Loader2, Plus, RefreshCw, ShieldCheck, UserRound } from "lucide-react";
@@ -13,7 +15,6 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { getUsageDisplayBuckets } from "@/lib/utils/usage";
-import { CodexModels } from "./account-models";
 import type { Account, AccountUsage } from "@/types";
 
 function formatReset(timestamp: number | null): string {
@@ -207,6 +208,7 @@ export function CodexAccountsPanel({ view = "usage" }: { view?: "connections" | 
     () => attachUsagesToAccounts(accountsQuery.data?.items || [], usageQuery.data || []),
     [accountsQuery.data, usageQuery.data],
   );
+  const sortedAccounts = activeFirst(accounts, account => Boolean(profileQuery.data?.identityConsistent && account.id === profileQuery.data?.selectedAccountId));
   const active = accounts.find((account) => account.id === profileQuery.data?.selectedAccountId) || null;
   const activeSnapshotStale = snapshotIsStale(active?.lastRefreshAt ?? null);
 
@@ -240,7 +242,7 @@ export function CodexAccountsPanel({ view = "usage" }: { view?: "connections" | 
       <header className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <h2 className="text-lg font-semibold tracking-tight">Codex 账号</h2>
-          <p className="mt-1 text-xs text-muted-foreground">{managing ? "管理官方授权和默认身份；切换仅影响新启动的 Codex。" : "各账号的独立额度窗口与官方模型目录。"}</p>
+          <p className="mt-1 text-xs text-muted-foreground">{managing ? "管理官方授权和默认身份；切换仅影响新启动的 Codex。" : "当前使用账号置顶，独立展示每个账号的额度窗口与重置时间。"}</p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           {!managing ? <Badge variant="outline"><RefreshCw />{autoRefreshQuery.data?.usagePollingEnabled ? `全部账号每 ${formatPollingInterval(autoRefreshQuery.data.usagePollIntervalSecs)}自动刷新` : "自动刷新未启用"}</Badge> : null}
@@ -288,21 +290,21 @@ export function CodexAccountsPanel({ view = "usage" }: { view?: "connections" | 
             {active?.hasSubscription ? <><span>套餐到期：{formatSubscriptionDate(active.subscriptionExpiresAt)}</span><span>下次续订：{formatSubscriptionDate(active.subscriptionRenewsAt)}</span></> : <span>未检测到付费套餐</span>}
           </div>
         </CardContent>
-      </Card> : <CodexModels />}
+      </Card> : null}
 
       <section className="space-y-3">
         <div className="flex items-center justify-between"><h2 className="text-base font-semibold">{managing ? "已接入账号" : "账号额度"}</h2><span className="text-sm text-muted-foreground">{accounts.length} 个</span></div>
         <div className="grid gap-3 lg:grid-cols-2">
-          {accounts.map((account) => {
+          {sortedAccounts.map((account) => {
             const plan = normalizedPlan(account);
-            const isActive = account.id === profileQuery.data?.selectedAccountId;
+            const isActive = Boolean(profileQuery.data?.identityConsistent && account.id === profileQuery.data?.selectedAccountId);
             const canSwitch = account.status === "active" && account.hasToken;
             return (
-              <Card key={account.id} className={`glass-card rounded-2xl ${isActive ? "border-primary/45" : "border-border/70"}`}>
+              <Card key={account.id} data-testid="codex-quota-card" data-active-account={isActive} style={isActive ? { borderColor: "#4dbb9c" } : undefined} className={`glass-card rounded-2xl ${isActive ? "border-emerald-500/50 ring-1 ring-emerald-500/15 bg-emerald-500/[0.045]" : "border-border/70"}`}>
                 <CardContent className="grid gap-4 p-5">
                   <div className="flex items-start justify-between gap-3">
                     <div className="flex min-w-0 gap-3"><div className="flex size-10 shrink-0 items-center justify-center rounded-full bg-muted"><UserRound className="size-5" /></div><div className="min-w-0"><p className="truncate font-semibold" title={account.name}>{account.name}</p><p className="mt-1 text-xs text-muted-foreground">{formatFreshness(account.lastRefreshAt)}</p></div></div>
-                    <div className="flex gap-2"><Badge variant={plan.conflict ? "outline" : "secondary"}>{plan.label}</Badge>{isActive ? <Badge>当前</Badge> : null}</div>
+                    <div className="flex gap-2"><Badge variant={plan.conflict ? "outline" : "secondary"}>{plan.label}</Badge>{isActive ? <Badge className="bg-emerald-600 text-white"><CheckCircle2 className="size-3" />当前使用</Badge> : null}</div>
                   </div>
                   {!managing ? <div className="grid gap-4 sm:grid-cols-2"><UsageWindows usage={account.usage} /></div> : null}
                   {plan.conflict ? <p className="text-xs text-amber-600">套餐来源冲突：effective={account.planType || "未知"}，subscription={account.subscriptionPlan || "未知"}，暂不自动判定。</p> : null}

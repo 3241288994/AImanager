@@ -233,7 +233,8 @@ async function mockConsoleApi(
         { id: "claude-a", provider: "claude", label: "Claude personal", active: true, authStatus: "authenticated", quota: {state: "available", source: "official_oauth_usage", checkedAt: 1792491282, windows: [{label: "5 小时额度", remainingPercent: 82, usedPercent: 18, resetsAt: null}]}, models: { state: "available", items: [{id:"claude-example",name:"Example model"}], source: "official_cli_cache" } },
         { id: "agy-a", provider: "antigravity", label: "Antigravity personal", active: true, authStatus: "authenticated", quota: {state: "unavailable", windows: [], note: "需要完成首次设置"} },
       ], summary: {accounts:2,authenticated:2,quotaKnown:1} },
-      "aiConnections/list": {items:[],host:"test-host",cli:[]},
+      "aiConnections/list": {items:[{id:"gemini-web",name:"Gemini 网页账号池",baseUrl:"http://127.0.0.1:16969/v1",credentialSource:"gemini-web-client",enabled:true}],host:"test-host",cli:[]},
+      "aiConnections/quota": {readyAccounts:2,checkedAt:Math.floor(Date.now()/1000),note:"自动轮转",accounts:[{index:1,status:"available",tier:"PRO",stale:false,probeFailed:false,usageUpdatedAt:new Date().toISOString(),windows:[{label:"5 小时额度",remainingPercent:82,remainingCredits:1960,resetsAt:null},{label:"每周额度",remainingPercent:null,remainingCredits:null,resetsAt:null}]}]},
       "apikey/modelCatalogList": {items:[{slug:"gpt-example",displayName:"GPT example",sourceKind:"remote"}]},
       initialize: {
         userAgent: "codex_cli_rs/0.1.0",
@@ -242,7 +243,7 @@ async function mockConsoleApi(
         platformOs: "linux",
       },
       "account/list": {
-        items: [{
+        items: [{id: "account-2",label: "Backup account",status:"active",hasToken:true,planType:"plus"}, {
           id: "account-1",
           label: "Research account",
           status: "active",
@@ -341,7 +342,12 @@ async function mockConsoleApi(
       "labcontext/overview": labContextOverview,
       "labcontext/getResearchMap": researchMapBundle,
     };
-    const result = responses[body.method] ?? {};
+    const result = body.method === "aiAccounts/action" && body.params?.action === "analytics" ? {
+      accountId:body.params.accountId, provider:body.params.accountId === "claude-a" ? "claude" : "antigravity",
+      days:body.params.accountId === "claude-a" ? [{date:body.params.startDate,capturedAt:Math.floor(Date.now()/1000),totals:{credits:null,turns:3,uncachedInputTokens:100,cachedInputTokens:50,outputTokens:20,totalTokens:170}}] : [],
+      quotaHistory:[{capturedAt:Math.floor(Date.now()/1000),windows:[{label:"5 小时额度",remainingPercent:82,resetsAt:null}]}],
+      coverage:{filesScanned:1,partial:false}, checkedAt:Math.floor(Date.now()/1000),note:"各平台来源独立"
+    } : responses[body.method] ?? {};
     await route.fulfill({
       contentType: "application/json; charset=utf-8",
       body: JSON.stringify({ jsonrpc: "2.0", id: body.id ?? 1, result }),
@@ -429,7 +435,7 @@ test("the connection center runs one-click recovery and reports an exact safe fa
 });
 
 
-test("AI connections owns identity changes; usage stays focused on quotas and models", async ({ page }) => {
+test("AI connections owns identity changes; usage stays focused on quotas without model catalogs", async ({ page }) => {
   const methods = await mockConsoleApi(page);
   const errors: string[] = [];
   page.on("pageerror", error => errors.push(error.message));
@@ -438,8 +444,9 @@ test("AI connections owns identity changes; usage stays focused on quotas and mo
   await expect(page.getByRole("button", { name: "添加 Codex 账号" })).toHaveCount(0);
   await expect(page.getByRole("button", { name: "切换到此账号" })).toHaveCount(0);
   await page.getByRole("tab", { name: /Claude Code/ }).click();
-  await expect(page.getByText("剩余 82%", { exact: true })).toBeVisible();
-  await expect(page.getByText("Example model", { exact: true })).toBeVisible();
+  await expect(page.getByText("剩余 82%", { exact: true }).first()).toBeVisible();
+  await expect(page.getByText("Example model", { exact: true })).toHaveCount(0);
+  expect(methods).not.toContain("apikey/modelCatalogList");
   await expect(page.getByRole("button", { name: /网页登录|登录其他|设为默认/ })).toHaveCount(0);
   await page.getByRole("link", { name: "AI 接入", exact: true }).click();
   await expect(page.getByRole("heading", { name: "AI 接入中心" })).toBeVisible();
@@ -447,7 +454,7 @@ test("AI connections owns identity changes; usage stays focused on quotas and mo
   await expect(page.getByRole("button", { name: /刷新.*额度/ })).toHaveCount(0);
   await page.getByRole("tab", { name: /Claude Code/ }).click();
   await expect(page.getByRole("button", { name: "登录其他 Claude Code 账号" })).toBeVisible();
-  await expect(page.getByText("剩余 82%", { exact: true })).toHaveCount(0);
+  await expect(page.getByText("剩余 82%", { exact: true }).first()).toHaveCount(0);
   await page.getByRole("tab", { name: /Antigravity/ }).click();
   await expect(page.getByRole("button", { name: "登录其他 Antigravity 账号" })).toBeVisible();
   await page.setViewportSize({width:390,height:844});
@@ -455,4 +462,32 @@ test("AI connections owns identity changes; usage stays focused on quotas and mo
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
   expect(errors).toEqual([]);
   expect(methods).toContain("aiAccounts/action");
+});
+
+
+test("active accounts lead, web quota preserves unknowns, and CLI analytics switches independently", async ({ page }) => {
+  const methods = await mockConsoleApi(page);
+  const errors: string[] = [];
+  page.on("pageerror", error => errors.push(error.message));
+  await page.goto("/");
+  await expect(page.getByTestId("codex-quota-card").first()).toContainText("Research account");
+  await expect(page.getByTestId("codex-quota-card").first()).toHaveAttribute("data-active-account", "true");
+  const pool = page.getByRole("region", {name:"网页账号池额度"});
+  await expect(pool).toContainText("剩余 82%");
+  await expect(pool).toContainText("剩余未知");
+  await expect(page.getByText("Codex 模型目录", {exact:true})).toHaveCount(0);
+  await page.getByRole("link", {name:"用量分析",exact:true}).click();
+  await page.getByRole("tab", {name:/Claude Code/}).click();
+  await expect(page.getByRole("heading", {name:"Claude Code 使用概览"})).toBeVisible();
+  await expect(page.getByTestId("usage-chart")).toBeVisible();
+  await expect(page.getByText("模型回复次数", {exact:true})).toBeVisible();
+  await expect(page.getByText("参考金额 · USD", {exact:true})).toHaveCount(0);
+  await page.getByRole("tab", {name:/Antigravity/}).click();
+  await expect(page.getByRole("heading", {name:"Antigravity 使用概览"})).toBeVisible();
+  await expect(page.getByTestId("quota-history-chart")).toBeVisible();
+  await expect(page.getByTestId("usage-chart")).toHaveCount(0);
+  await page.setViewportSize({width:390,height:844});
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+  expect(methods).toContain("aiConnections/quota");
+  expect(errors).toEqual([]);
 });

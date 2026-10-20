@@ -78,11 +78,24 @@ def account(root, account_id):
     raise ValueError("Unknown CLI account")
 
 
+def usage_history_module():
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("aimanager_usage_history", Path(__file__).with_name("usage_history.py"))
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
 def update_account(root, account_id, **patch):
     with registry(root) as value:
         for item in value["accounts"]:
             if item["id"] == account_id:
                 item.update(patch)
+                if "quota" in patch:
+                    try:
+                        usage_history_module().record_snapshot(root, item)
+                    except (OSError, ValueError):
+                        item["quota"]["historyError"] = "Quota refreshed, but local history could not be saved"
                 return
     raise ValueError("Unknown CLI account")
 
@@ -599,6 +612,10 @@ def run_session(root, session_id):
 
 def dispatch(root, request):
     action = request.get("action")
+    if action == "analytics":
+        item = account(root, request.get("accountId"))
+        home, _ = profile_env(root, item)
+        return usage_history_module().report(root, item, home, request.get("startDate"), request.get("endDate"))
     if action == "list":
         return account_list(root)
     if action == "sync":

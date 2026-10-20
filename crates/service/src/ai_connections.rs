@@ -1,4 +1,7 @@
 //! Administrator-only connection inventory. Credentials never enter RPC payloads.
+mod web_quota;
+pub(crate) use web_quota::quota;
+
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::{
@@ -180,7 +183,13 @@ fn credential(source: &str) -> Result<String, String> {
 }
 
 fn get_json(client: &reqwest::blocking::Client, url: url::Url, key: &str) -> Result<Value, String> {
-    let response = client.get(url).bearer_auth(key).send().map_err(|err| {
+    let request = client.get(url);
+    let request = if key.is_empty() {
+        request
+    } else {
+        request.bearer_auth(key)
+    };
+    let response = request.send().map_err(|err| {
         if err.is_timeout() {
             "Request timed out; check the account pool and SSH tunnel".to_string()
         } else {
@@ -211,6 +220,13 @@ pub(crate) fn probe(id: &str) -> Result<Value, String> {
         return Err("Connection is disabled".into());
     }
     let base = validate(&connection)?;
+    if connection.credential_source == "gemini-web-client" {
+        let started = Instant::now();
+        let report = quota(id)?;
+        return Ok(
+            json!({"id":id, "status":"reachable", "latencyMs":started.elapsed().as_millis(), "models":[], "health":"reachable", "healthSummary":report, "generationVerified":false, "note":"连接检测成功；未发送生成请求，不代表实际调用成功。"}),
+        );
+    }
     let key = credential(&connection.credential_source)?;
     let client = reqwest::blocking::Client::builder()
         .timeout(Duration::from_secs(12))
@@ -229,7 +245,7 @@ pub(crate) fn probe(id: &str) -> Result<Value, String> {
         .get("data")
         .and_then(Value::as_array)
         .ok_or("Missing model data array")?;
-    let ids: Vec<String> = data
+    let _ids: Vec<String> = data
         .iter()
         .take(256)
         .filter_map(|v| v.get("id")?.as_str())
@@ -251,8 +267,8 @@ pub(crate) fn probe(id: &str) -> Result<Value, String> {
     };
     Ok(
         json!({"id": id, "status": "reachable", "latencyMs": started.elapsed().as_millis(),
-        "models": ids, "health": health, "healthSummary": summary, "healthError": health_error, "generationVerified": false,
-        "note": "模型目录与健康端点检查不代表生成成功；未发送生成请求，不消耗模型额度。"}),
+        "models": [], "health": health, "healthSummary": summary, "healthError": health_error, "generationVerified": false,
+        "note": "连接检查不代表生成成功；未发送生成请求。"}),
     )
 }
 
@@ -260,9 +276,10 @@ fn health_summary(value: &Value) -> Value {
     let accounts = value.get("accounts").and_then(Value::as_array).map(|items| {
         items.iter().take(32).enumerate().map(|(index, item)| {
             let status = item.get("status").and_then(Value::as_str).unwrap_or("unknown");
-            let status = match status {
+            let normalized = status.to_ascii_lowercase();
+            let status = match normalized.as_str() {
                 "ready" | "available" | "active" | "busy" | "cooldown" | "needs_login"
-                | "login_required" | "offline" | "unavailable" | "error" | "recovering" => status,
+                | "login_required" | "offline" | "unavailable" | "error" | "recovering" => normalized.as_str(),
                 _ => "unknown",
             };
             json!({"index":index + 1, "status":status,

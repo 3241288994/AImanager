@@ -46,11 +46,11 @@ export default function ConnectionsPage() {
     <AiPlatforms view="connections" />
     <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border/60 px-4 py-3 text-xs text-muted-foreground">
       <span>服务主机：{overview.data?.host ?? "待检测"} · 官方账号与网页 API 独立管理</span>
-      <Link href="/" className="inline-flex items-center gap-1 font-medium text-primary">查看额度与可用模型<ArrowUpRight className="size-3.5" /></Link>
+      <Link href="/" className="inline-flex items-center gap-1 font-medium text-primary">查看账号额度<ArrowUpRight className="size-3.5" /></Link>
     </div>
     <section className="space-y-3" aria-label="API 入口">
       <div className="flex items-center justify-between"><h3 className="flex items-center gap-2 font-semibold"><Cable className="size-4" />API 接入</h3><Button size="sm" disabled={!overview.data || busy} onClick={() => setDraft({ ...EMPTY })}><Plus className="mr-1 size-4" />添加入口</Button></div>
-      <p className="text-sm text-muted-foreground">仅连接主机回环地址；远端服务请先建立获授权的 SSH 通道。模型 ID 以实时目录为准，不将网页别名当作官方模型版本。</p>
+      <p className="text-sm text-muted-foreground">仅连接主机回环地址；远端服务请先建立获授权的 SSH 通道。连接检测与账号额度独立展示。</p>
       {draft ? <form className="glass-card space-y-4 rounded-xl border p-4" onSubmit={e => {
         e.preventDefault(); save.mutate(draft, { onSuccess: () => { setDraft(null); setResults({}); toast.success("入口已保存"); }, onError: error });
       }}>
@@ -71,10 +71,10 @@ export default function ConnectionsPage() {
           <CardContent className="space-y-3"><div className="flex flex-wrap gap-2"><Button size="sm" disabled={!item.enabled || probe.isPending || busy} onClick={() => {
             setResults(previous => { const next = { ...previous }; delete next[item.id]; return next; });
             probe.mutate(item.id, { onSuccess: data => { setResults(p => ({ ...p, [item.id]: data })); setCheckedAt(p => ({ ...p, [item.id]: new Date().toLocaleTimeString() })); }, onError: e => { setResults(p => ({ ...p, [item.id]: getAppErrorMessage(e) })); } });
-          }}>{probe.isPending && probe.variables === item.id ? "检测中…" : "检测连接与模型"}</Button><Button size="sm" variant="outline" disabled={busy} onClick={() => setDraft({ ...item })}>编辑</Button><Button size="sm" variant="outline" disabled={busy} onClick={() => save.mutate({ ...item, enabled: !item.enabled }, { onSuccess: () => setResults({}), onError: error })}>{item.enabled ? "停用检测" : "启用检测"}</Button><Button size="sm" variant="ghost" disabled={busy} onClick={() => {
+          }}>{probe.isPending && probe.variables === item.id ? "检测中…" : "检测连接"}</Button><Button size="sm" variant="outline" disabled={busy} onClick={() => setDraft({ ...item })}>编辑</Button><Button size="sm" variant="outline" disabled={busy} onClick={() => save.mutate({ ...item, enabled: !item.enabled }, { onSuccess: () => setResults({}), onError: error })}>{item.enabled ? "停用检测" : "启用检测"}</Button><Button size="sm" variant="ghost" disabled={busy} onClick={() => {
             if (window.confirm(`移除入口「${item.name}」？不会删除凭证或停止账号池。`)) remove.mutate(item.id, { onError: error });
           }}>移除</Button></div>
-          {typeof result === "string" ? <p role="alert" className="text-sm text-destructive">{result}</p> : result ? <div role="status" className="space-y-2 rounded-lg border p-3 text-sm"><p>目录可达 · {result.latencyMs} ms · {checkedAt[item.id]} · 健康端点：{result.health}</p><div className="flex flex-wrap gap-2">{result.models.map(model => <Badge key={model} variant="secondary">{model}</Badge>)}</div>
+          {typeof result === "string" ? <p role="alert" className="text-sm text-destructive">{result}</p> : result ? <div role="status" className="space-y-2 rounded-lg border p-3 text-sm"><p>连接可达 · {result.latencyMs} ms · {checkedAt[item.id]} · 健康端点：{result.health}</p>
             {result.healthError ? <p className="text-destructive">健康检查：{result.healthError}</p> : null}
             {result.healthSummary ? <div className="space-y-2"><p>上游报告可用账号：{result.healthSummary.readyAccounts ?? "未提供"}</p><div className="flex flex-wrap gap-2">{result.healthSummary.accounts?.map(account => <Badge key={account.index} variant="outline">账号 {account.index} · {ACCOUNT_STATUS[account.status] ?? "未知"}{account.cooldownSeconds ? ` · 冷却 ${account.cooldownSeconds}s` : ""}</Badge>)}</div></div> : null}
             <p className="text-xs text-muted-foreground">{result.note}</p></div> : <p className="text-xs text-muted-foreground">尚未检测。Mac 休眠、网页账号离线或 SSH 通道失效都可能导致不可用。</p>}
