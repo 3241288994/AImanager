@@ -2,9 +2,11 @@
 
 日期：2026-10-21（Asia/Shanghai）。
 
-这是一个含预置缺陷的隔离示例，所有模型调用、文件操作和测试均真实执行。截图汇集了真实调用中的关键分析、反馈、修改和验证结果，便于快速了解协作过程。
+这是一个含预置缺陷的隔离示例，所有模型调用、文件操作和测试均真实执行。图中六块内容来自实际调用的原始输出，按段摘取并渲染截图后拼接；保留原话，省略处以 … 标记，黄色下划线为后加标注。
 
-![协作记录](../assets/aimanager-collaboration-demo.png)
+![多 CLI 与 API 模型原始输出节选截图拼接](../assets/aimanager-collaboration-demo.png)
+
+[查看高清原图（3360 × 3366，无损 PNG）](../assets/aimanager-collaboration-demo.png?raw=true)
 
 ## 任务与结果
 
@@ -20,6 +22,11 @@
 - [测试](quota-example/test_quota.py)
 - [结构化调用结果](collaboration-demo-records.json)
 - [图片排版源文件](../assets/aimanager-collaboration-demo.html)
+- [六段输出的文字渲染源文件](../assets/collaboration-outputs/source.html)
+
+原始分图：[01 · Codex 复现](../assets/collaboration-outputs/01.png) · [02 · Claude 审阅](../assets/collaboration-outputs/02.png) ·
+[03 · Gemini 参考双方意见](../assets/collaboration-outputs/03.png) · [04 · Claude 采纳与修正](../assets/collaboration-outputs/04.png) ·
+[05 · Claude 修改](../assets/collaboration-outputs/05.png) · [06 · Codex 复测](../assets/collaboration-outputs/06.png)。
 
 在 quota-example 目录运行 `PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -v`。
 
@@ -30,7 +37,7 @@
 - Gemini 渠道请求/报告 `gemini-argon`（个人别名 `gemini4`），metadata 来自反代，不构成对上游模型身份的独立鉴定。
 - API 仅接收选定的示例代码与审阅文本，没有工作区访问权限。
 - `reply` 用于原会话续接；Claude 的只读会话没有被升级权限，执行使用新的显式授权任务。
-- 以下保留原输出内容；截图中的短句为摘录或忠实摘要，代码区为变更摘要。账号标识、凭据和私人主机路径未纳入公开记录。
+- 以下保留完整输出；图中采用原文摘录，步骤标题为后加说明。账号标识、凭据和私人主机路径未纳入公开记录。
 
 ## 原始结果文本
 

@@ -58,12 +58,15 @@
 最后核对代码差异与测试结果。
 
 <p align="center">
-  <img width="960" alt="真实协作记录摘要：Codex CLI 复现问题，Claude Code 审阅，Gemini API 参考双方意见，Claude 修改后由 Codex 独立复测，10 项测试通过" src="docs/assets/aimanager-collaboration-demo.png" />
+  <img width="960" alt="模型原始输出节选截图拼接：Codex CLI 复现问题，Claude Code 审阅，Gemini API 引用双方分析，Claude 采纳并修正、修改代码，Codex 独立复测通过" src="docs/assets/aimanager-collaboration-demo.png" />
 </p>
 
-上图是隔离示例的**真实调用摘要**：Codex CLI 复现失败，Claude Code 独立审阅，Gemini API 参考双方发现并提出建议；
+[查看高清原图（3360 × 3366，无损 PNG）](docs/assets/aimanager-collaboration-demo.png?raw=true)
+
+上图是隔离示例的**模型原始输出节选截图拼接**，保留原话，省略处以 … 标记，步骤编号与重点下划线为后加标注。
+Codex CLI 复现失败，Claude Code 独立审阅，Gemini API 引用双方分析并提出建议；
 Claude 续接讨论、修正方案，再通过新的授权任务修改代码；Codex 独立复测，主控再次确认，最终 **10 项测试全部通过**。
-两个 CLI 直接查看项目、修改与测试，API 模型参考双方分析补充建议，让讨论落实为代码变更和可验证的结果。
+图中可以直接看到 Gemini 引用两份 CLI 分析、Claude 说明采纳与修正、Codex 最后独立运行测试的原文。
 
 分工可以调整；材料由主控按需转交，API 模型只接收选定文本。编辑和执行仍需明确授权。
 [本次调用记录与可复现示例](docs/demos/collaboration-demo.md) · [协作使用说明](docs/ai-collaboration.md) · [真实调用验证记录](docs/collaboration-validation.md)

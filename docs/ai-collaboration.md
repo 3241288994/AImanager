@@ -10,9 +10,12 @@
 
 ## 先看一次协作如何衔接
 
-<img width="960" alt="真实协作记录摘要：Codex CLI 复现失败，Claude Code 审阅并修改，Gemini API 参考双方意见，再由 Codex 独立复测，10 项测试通过" src="assets/aimanager-collaboration-demo.png" />
+<img width="960" alt="模型原始输出节选截图拼接：Codex CLI 复现失败，Claude Code 审阅并修改，Gemini API 引用双方意见，Claude 采纳并修正，再由 Codex 独立复测通过" src="assets/aimanager-collaboration-demo.png" />
 
-上图汇集了隔离示例的真实调用：Codex CLI 运行测试复现问题，Claude Code 独立审阅输入边界，
+[查看高清原图（3360 × 3366，无损 PNG）](assets/aimanager-collaboration-demo.png?raw=true)
+
+上图由隔离示例的六段模型原始输出节选渲染截图后拼接，保留原话；省略处以 … 标记，步骤编号与重点下划线为后加标注。
+Codex CLI 运行测试复现问题，Claude Code 独立审阅输入边界，
 Gemini API 结合代码和两份意见提出建议；Claude 续接讨论、修正方案，再新建授权任务修改代码，
 由 Codex 独立复测，主控再次核验，最终 10 项测试通过。
 [本次调用记录与可复现示例](demos/collaboration-demo.md)包含原始结果文本、修改前后代码和测试。

@@ -2,6 +2,7 @@
 from html.parser import HTMLParser
 from pathlib import Path
 import re
+import struct
 import unittest
 from urllib.parse import unquote, urlsplit
 
@@ -28,6 +29,8 @@ class PublicReadmeTest(unittest.TestCase):
         for name in (
             "README.md", "INSTALL.md", "docs/ai-connections.md", "docs/ai-collaboration.md",
             "docs/demos/collaboration-demo.md", "docs/demos/quota-example/README.md",
+            "docs/assets/aimanager-collaboration-demo.html",
+            "docs/assets/collaboration-outputs/source.html",
         ):
             document = ROOT / name
             text = document.read_text(encoding="utf-8")
@@ -73,6 +76,20 @@ class PublicReadmeTest(unittest.TestCase):
                 self.assertIn("API", images[0].get("alt", ""))
                 self.assertIn("demos/collaboration-demo.md", text)
                 self.assertNotIn("aimanager-collaboration-flow.svg", text)
+
+    def test_collaboration_demo_keeps_high_resolution_and_original_panels(self):
+        demo = ROOT / "docs/assets/aimanager-collaboration-demo.png"
+        width, height = struct.unpack(">II", demo.read_bytes()[16:24])
+        self.assertGreaterEqual(width, 3000)
+        self.assertGreaterEqual(height, 3000)
+        for document in ("README.md", "docs/ai-collaboration.md", "docs/demos/collaboration-demo.md"):
+            self.assertIn("aimanager-collaboration-demo.png?raw=true", (ROOT / document).read_text(encoding="utf-8"))
+        for step in range(1, 7):
+            panel = ROOT / f"docs/assets/collaboration-outputs/{step:02}.png"
+            data = panel.read_bytes()
+            with self.subTest(step=step):
+                self.assertEqual(data[:8], b"\x89PNG\r\n\x1a\n")
+                self.assertGreaterEqual(struct.unpack(">I", data[16:20])[0], 1500)
 
     def test_public_install_and_badge_use_the_current_repository_name(self):
         readme = (ROOT / "README.md").read_text(encoding="utf-8")
