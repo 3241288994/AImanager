@@ -7,7 +7,7 @@ import time
 from typing import Any, Callable, Mapping
 from urllib.request import ProxyHandler, build_opener
 
-from labcontext_connections import ConnectionError, ConnectionStore, port_open, read_json, timestamp, write_json
+from labcontext_connections import ConnectionError, ConnectionStore, port_open, read_json, timestamp, tunnel_preflight_command, write_json
 
 
 class TunnelControl:
@@ -74,7 +74,7 @@ class TunnelControl:
             target = self.store.get(str(request.get("connectionId", "")))
             environment = self.store.environment(target, self.environment)
             # Silent diagnostics: provider output may contain secret-bearing URLs.
-            result = subprocess.run([self.client, "doctor", "--profile", target["profile"], "--explain"],
+            result = subprocess.run(tunnel_preflight_command(self.client, target["profile"]),
                                     env=environment, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
                                     stderr=subprocess.DEVNULL, timeout=12, check=False)
             if result.returncode:

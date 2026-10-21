@@ -7,6 +7,7 @@ import sys
 import tempfile
 import time
 import unittest
+from argparse import Namespace
 from pathlib import Path
 from unittest import mock
 
@@ -14,6 +15,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from labcontext_connections import (ConnectionError, ConnectionStore,
                                     credential_file, health_address, locked, read_json, write_json)
 from labcontext_tunnel_control import TunnelControl
+from labcontext_connection_cli import connections_command
 
 
 class ConnectionsTest(unittest.TestCase):
@@ -132,6 +134,16 @@ class ConnectionsTest(unittest.TestCase):
         self.assertEqual(read_json(self.store.operation_path)["reasonCode"], "tunnel_preflight_failed")
         self.assertEqual(run.call_args.kwargs["env"]["CONTROL_PLANE_API_KEY"], "test-only-new-key")
         self.assertEqual(run.call_args.kwargs["stdout"], subprocess.DEVNULL)
+        self.assertEqual(run.call_args.args[0][-2:], ["--health.listen-addr", "127.0.0.1:0"])
+
+    def test_cli_check_uses_ephemeral_health_without_changing_the_selection(self) -> None:
+        self.store.add(self.profile)
+        with mock.patch("labcontext_connection_cli.subprocess.run", return_value=mock.Mock(returncode=0)) as run, \
+                mock.patch("builtins.print"):
+            self.assertEqual(connections_command(Namespace(connection_command="check", id="next"),
+                             self.store.values, "http://127.0.0.1:1460"), 0)
+        self.assertEqual(run.call_args.args[0][-2:], ["--health.listen-addr", "127.0.0.1:0"])
+        self.assertEqual(self.store.catalog()["activeId"], "current")
 
     def test_success_commits_only_after_readiness_and_stability(self) -> None:
         self.store.add(self.profile)

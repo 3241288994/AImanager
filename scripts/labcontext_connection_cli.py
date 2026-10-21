@@ -9,7 +9,7 @@ from typing import Any
 from urllib.request import ProxyHandler, Request, build_opener
 from urllib.error import HTTPError
 
-from labcontext_connections import ConnectionError, ConnectionStore, safe_name
+from labcontext_connections import ConnectionError, ConnectionStore, safe_name, tunnel_preflight_command
 
 
 HANDOFF_PROMPT = """请仅通过 LabContext 继续我的项目：先调用 list_workspaces，展示可用来源并让我选择项目；
@@ -64,7 +64,7 @@ def connections_command(args: argparse.Namespace, values: dict[str, str], router
         import os
         environment = store.environment(profile, {**os.environ, **values})
         try:
-            result = subprocess.run([values.get("LABCONTEXT_TUNNEL_CLIENT", "tunnel-client"), "doctor", "--profile", profile["profile"], "--explain"],
+            result = subprocess.run(tunnel_preflight_command(values.get("LABCONTEXT_TUNNEL_CLIENT", "tunnel-client"), profile["profile"]),
                                     env=environment, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
                                     stderr=subprocess.DEVNULL, timeout=12, check=False)
         except (OSError, subprocess.TimeoutExpired) as exc:

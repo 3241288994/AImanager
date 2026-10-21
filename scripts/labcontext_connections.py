@@ -121,6 +121,14 @@ def port_open(url: str) -> bool:
         return False
 
 
+def tunnel_preflight_command(client: str, profile: str) -> list[str]:
+    # doctor binds its health port too. The old managed Tunnel must remain
+    # running during preflight, so probe an ephemeral loopback port here. The
+    # real target health port is checked after stopping only our owned child.
+    return [client, "doctor", "--profile", profile, "--explain",
+            "--health.listen-addr", "127.0.0.1:0"]
+
+
 def credential_file(path: str) -> dict[str, str]:
     """Read one narrowly-scoped key, never arbitrary process environment overrides."""
     target = Path(path).expanduser()
