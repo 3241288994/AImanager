@@ -138,6 +138,7 @@ class RouterTest(unittest.TestCase):
         self.addCleanup(state.cleanup)
         environment = mock.patch.dict(os.environ, {
             "LABCONTEXT_STATUS_FILE": str(Path(state.name) / "launcher.json"),
+            "LABCONTEXT_ENV_FILE": str(Path(state.name) / "launcher.env"),
             "LABCONTEXT_ENABLE_TUNNEL": "0",
         })
         environment.start()
@@ -172,6 +173,39 @@ class RouterTest(unittest.TestCase):
         self.assertIsNotNone(response)
         assert response is not None
         self.assertEqual(response["result"]["serverInfo"]["version"], ROUTER_VERSION)
+
+    def test_connection_management_does_not_expand_model_tool_surface(self) -> None:
+        names = {tool["name"] for tool in self.router._tools()[0]}
+        self.assertTrue(names.isdisjoint({"connection_check", "connections_use", "connections_snapshot", "restart", "read_secret"}))
+        with self.assertRaises(RouterError):
+            self.router.call_tool("connection_check", {})
+
+    def test_connection_management_rejects_cross_origin_forms_and_rebinding(self) -> None:
+        from urllib.request import Request, build_opener, ProxyHandler
+        from urllib.error import HTTPError
+        server = RouterServer(("127.0.0.1", 0), self.router)
+        threading.Thread(target=server.serve_forever, daemon=True).start()
+        self.addCleanup(server.server_close)
+        self.addCleanup(server.shutdown)
+        opener = build_opener(ProxyHandler({}))
+        url = f"http://127.0.0.1:{server.server_port}/api/connections/action"
+        for headers in ({"Content-Type": "text/plain"}, {"Content-Type": "application/json", "Origin": "https://evil.test"},
+                        {"Content-Type": "application/json", "Host": "evil.test"}):
+            with self.subTest(headers=headers), self.assertRaises(HTTPError):
+                opener.open(Request(url, data=b"{}", headers=headers), timeout=2)
+        self.assertFalse(self.router.connections.catalog_path.exists())
+        with mock.patch.object(self.router, "access_action", return_value={"phase": "queued"}):
+            with opener.open(Request(url, data=b"{}", headers={"Content-Type": "application/json"}), timeout=2) as response:
+                self.assertEqual(response.status, 202)
+        for endpoint in ("snapshot", "verify"):
+            with self.assertRaises(HTTPError) as raised:
+                opener.open(Request(url.rsplit("/", 1)[0] + "/" + endpoint, data=b"{}", headers={"Content-Type": "application/json"}), timeout=2)
+            self.assertEqual(raised.exception.code, 404)
+
+    def test_old_launcher_is_not_implicitly_restarted_for_access_changes(self) -> None:
+        with mock.patch.object(self.router, "_launcher_status", return_value={"status": "running", "launcherPid": os.getpid()}), \
+                self.assertRaisesRegex(RouterError, "更新本机"):
+            self.router.access_action({"action": "reconnect", "connectionId": "current"})
 
     def test_tool_schema_accepts_workspace_ref_instead_of_workspace_id(self) -> None:
         tools, _ = self.router._tools(force=True)
@@ -255,7 +289,7 @@ class RouterTest(unittest.TestCase):
         with mock.patch.dict("os.environ", {"LABCONTEXT_ENABLE_TUNNEL": "0"}):
             status = self.router.connection_status()
         self.assertEqual(status["overall"], "ready")
-        self.assertEqual(status["router"]["version"], "0.4.0")
+        self.assertEqual(status["router"]["version"], ROUTER_VERSION)
         self.assertEqual(status["tunnel"]["status"], "disabled")
         self.assertEqual({item["serverName"] for item in status["providers"]}, {"LabContext"})
 

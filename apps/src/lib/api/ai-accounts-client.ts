@@ -25,6 +25,7 @@ export interface AiAuthSession {
   phase: string;
   authorizationUrl: string | null;
   message: string;
+  reasonCode?: string | null;
   startedAt: number;
   updatedAt: number;
 }

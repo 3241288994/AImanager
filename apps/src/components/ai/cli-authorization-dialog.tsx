@@ -1,19 +1,20 @@
 "use client";
 
 import { useState } from "react";
-import { CheckCircle2, ExternalLink, Loader2, ShieldCheck } from "lucide-react";
+import { AlertTriangle, CheckCircle2, ExternalLink, Loader2, ShieldCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { aiAccountsClient, officialAuthUrl } from "@/lib/api/ai-accounts-client";
 import { getAppErrorMessage } from "@/lib/api/transport";
+import { cliAuthFeedback } from "@/lib/cli-auth-feedback";
 import type { useManagedCliSession } from "@/hooks/useManagedAiAccounts";
 
 const PHASES: Record<string, string> = { starting: "正在连接官方客户端", awaiting_browser: "请在官方页面授权", awaiting_code: "提交官方授权返回码", needs_confirmation: "继续官方客户端设置", verifying: "正在确认登录", reading_usage: "正在同步官方额度", succeeded: "已完成同步", failed: "本次操作未完成", cancelled: "本次操作已取消", expired: "授权已过期" };
 const DESCRIPTIONS: Record<string, string> = {
   starting: "在服务主机的独立配置中启动，不影响正在运行的任务。",
   awaiting_browser: "完成官方授权后回到这里，登录状态会自动更新。请勿分享临时链接。",
-  awaiting_code: "在官方页面完成登录，将返回码粘贴到下方。这里不需要账号密码。",
+  awaiting_code: "请用官方页面的“复制授权码 / Copy code”复制完整返回码，不要复制地址栏网址。返回码只能用于生成该链接的同一个登录窗口。",
   needs_confirmation: "官方客户端等待确认。继续将选择当前默认选项，不会发送模型问题。",
   verifying: "返回码已交给官方客户端，正在同步登录结果。",
   reading_usage: "只读取官方额度接口或 /usage 面板，不提交生成请求。",
@@ -31,20 +32,28 @@ function SessionDialog({ auth }: { auth: ReturnType<typeof useManagedCliSession>
   const value = auth.session.data;
   const phase = value?.phase ?? "starting";
   const link = officialAuthUrl(value?.authorizationUrl ?? null);
+  const feedback = cliAuthFeedback(value);
+  const failed = phase === "failed" || phase === "expired";
   return <Dialog open={Boolean(auth.id)} onOpenChange={open => { if (!open) auth.close(); }}>
     <DialogContent className="sm:max-w-lg">
       <DialogHeader>
-        <div className="mb-2 flex size-11 items-center justify-center rounded-2xl bg-primary/10 text-primary">{phase === "succeeded" ? <CheckCircle2 className="size-5" /> : auth.live ? <Loader2 className="size-5 animate-spin" /> : <ShieldCheck className="size-5" />}</div>
-        <DialogTitle>{PHASES[phase] ?? "官方账号连接"}</DialogTitle>
-        <DialogDescription>{auth.session.error ? getAppErrorMessage(auth.session.error) : DESCRIPTIONS[phase] ?? value?.message ?? "正在读取会话状态。"}</DialogDescription>
+        <div className="mb-2 flex size-11 items-center justify-center rounded-2xl bg-primary/10 text-primary">{phase === "succeeded" ? <CheckCircle2 className="size-5" /> : failed ? <AlertTriangle className="size-5" /> : auth.live ? <Loader2 className="size-5 animate-spin" /> : <ShieldCheck className="size-5" />}</div>
+        <DialogTitle>{failed && feedback ? feedback.title : PHASES[phase] ?? "官方账号连接"}</DialogTitle>
+        <DialogDescription>{auth.session.error ? getAppErrorMessage(auth.session.error) : feedback ? feedback.description : DESCRIPTIONS[phase] ?? value?.message ?? "正在读取会话状态。"}</DialogDescription>
       </DialogHeader>
       <div className="space-y-4 pt-2">
+        {feedback ? <div role="alert" className="space-y-2 rounded-xl border border-amber-500/25 bg-amber-500/5 p-3 text-sm">
+          <p className="font-medium">下一步</p><p className="break-words text-muted-foreground">{feedback.nextStep}</p>
+          <p className="break-all font-mono text-xs text-muted-foreground">诊断代码：{feedback.reasonCode}</p>
+        </div> : null}
+        {auth.operationError && phase !== "succeeded" ? <p role="alert" className="break-words rounded-xl border border-destructive/20 bg-destructive/5 p-3 text-sm text-destructive">{auth.operationError}</p> : null}
         {link && auth.live ? <Button className="w-full" render={<a href={link} target="_blank" rel="noreferrer noopener" />}><ExternalLink className="size-4" />打开官方授权页面</Button> : null}
         {phase === "awaiting_code" && auth.id ? <form className="space-y-3" onSubmit={event => {
           event.preventDefault(); const submitted = code; setCode("");
           void auth.run(async () => { await aiAccountsClient.sendCode(auth.id!, submitted); await auth.session.refetch(); });
         }}>
-          <Input required aria-label="官方授权返回码" maxLength={2048} type="password" autoComplete="off" placeholder="粘贴官方返回码，不是密码" value={code} onChange={event => setCode(event.target.value)} />
+          <Input required aria-label="官方授权返回码" aria-describedby="cli-auth-code-help" maxLength={2048} type="password" autoComplete="off" placeholder="粘贴完整返回码，不是网址或密码" value={code} onChange={event => setCode(event.target.value)} />
+          <p id="cli-auth-code-help" className="text-xs text-muted-foreground">不要分享返回码；提交后输入内容会立即清空，不写入浏览器存储。</p>
           <Button type="submit" className="w-full" disabled={auth.busy || !code}>提交返回码</Button>
         </form> : null}
         {phase === "needs_confirmation" ? <Button className="w-full" disabled={auth.busy} onClick={() => void auth.run(async () => { await aiAccountsClient.confirm(auth.id!); await auth.session.refetch(); })}>继续官方 CLI 确认</Button> : null}

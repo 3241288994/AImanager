@@ -15,7 +15,7 @@ Router 不包含 LabContext 本身，也不要求 Provider 由同一种方式安
 
 ## 安装与初始化
 
-要求 Python 3.9+。安装脚本只复制两个零依赖 Python 文件，不会安装或启动任何 Provider：
+要求 Python 3.9+。安装脚本只复制启动器、Router 及配套零依赖 Python 模块，不会安装或启动任何 Provider：
 
 ```bash
 scripts/install-labcontext.sh
@@ -128,6 +128,11 @@ SSH 主机可以填写 `~/.ssh/config` 中的别名。启动器会沿用该别�
 不要把 `LABCONTEXT_SSH_CONFIG_FILE=/dev/null` 与依赖 SSH 别名的配置同时使用。
 
 ## ChatGPT 中的调用方式
+
+需要准备后续更换 ChatGPT 账号时，使用 `labcontext connections snapshot` 保存当前配置引用。
+换号能力仅作为后台运维功能，不增加网页入口或 MCP 工具；新接入独立登记、显式切换，
+仅重连 Tunnel，不重启 Provider 或 SSH，详见[ChatGPT 换号运维](chatgpt-account-switch.md)。
+连接中心的“本机链路已就绪”不代表 ChatGPT 插件已经完成授权，需在目标账号单独验证实际调用。
 
 兼容 Provider 暴露 `inspect_path` 时，可以直接粘贴绝对路径，无需注册工作区：
 

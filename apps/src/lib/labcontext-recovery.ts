@@ -14,7 +14,7 @@ export function buildLabContextRecoveryPlan(
     return {
       title: "本机 Router 未响应",
       summary: "先检查配置和依赖，再以当前配置重新启动完整链路。",
-      command: "labcontext doctor && labcontext restart",
+      command: "labcontext repair",
       steps: [
         "确认 1460 端口没有被其他程序占用。",
         "若启动器记录失效，restart 会拒绝误杀无关进程并给出 PID。",
@@ -34,7 +34,7 @@ export function buildLabContextRecoveryPlan(
     return {
       title: "SSH 桥接没有建立成功",
       summary: `${exitCode}${attempts}。常见原因是 SSH 别名/密钥没有沿用、跳板机配置被绕过，或本地/服务器转发端口仍被旧会话占用。`,
-      command: "labcontext doctor && labcontext repair",
+      command: "labcontext repair",
       steps: [
         "doctor 会真实验证 SSH 登录与独立反向端口，并指出认证、超时或远端端口占用。",
         "修正 launcher.env 后，repair 会干净停止旧监督器并加载新配置。",
@@ -59,10 +59,11 @@ export function buildLabContextRecoveryPlan(
     return {
       title: "OpenAI Tunnel 未就绪",
       summary: status.tunnel.detail || "Tunnel 健康检查没有通过。",
-      command: "tunnel-client doctor --profile labcontext --explain && labcontext repair",
+      command: "labcontext connections reconnect",
       steps: [
         "先确认 Tunnel profile 指向 http://127.0.0.1:1460/mcp。",
-        "repair 会在诊断通过后重新加载完整链路。",
+        "新版支持只重连当前 Tunnel，不重启 Provider、SSH 或 Router。",
+        "若启动器较旧，请更新本机 labcontext 后在方便时重启一次。",
       ],
     };
   }
@@ -70,7 +71,7 @@ export function buildLabContextRecoveryPlan(
   return {
     title: failedComponent ? `${failedComponent.label}需要恢复` : "连接链路需要恢复",
     summary: "连接中心检测到组件状态与真实能力不一致。",
-    command: "labcontext doctor && labcontext repair",
+    command: "labcontext repair",
     steps: ["复制诊断可保留完整状态；repair 只会操作已验证的 LabContext 监督器。"],
   };
 }

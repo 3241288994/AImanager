@@ -151,7 +151,7 @@ async function mockConsoleApi(
           detail: failed ? "remote port forwarding failed for listen port 17987" : "全部能力检查通过",
           reasonCode: failed ? "ssh_reverse_port_in_use" : undefined,
           suggestions: failed ? ["停止服务器上的旧 LabContext SSH 会话后再次修复。"] : [],
-          command: failed ? "labcontext doctor && labcontext repair" : undefined,
+          command: failed ? "labcontext repair" : undefined,
         } : { schemaVersion: 1, phase: "idle", summary: "当前没有恢复任务" }),
       });
       return;
@@ -400,6 +400,66 @@ test("managed CLI accounts complete browser handoff, selection and official quot
   await expect(page.getByText("剩余 80%", { exact: true })).toBeVisible();
 });
 
+test("managed CLI login keeps actionable errors visible without exposing return codes", async ({ page }, testInfo) => {
+  await mockConsoleApi(page);
+  const accountId = "a".repeat(32);
+  const sessionId = "b".repeat(32);
+  let failed = false;
+  const callback = "https://platform.claude.com/oauth/code/callback?code=example-private-code&state=example-private-state";
+  await page.route("**/api/rpc", async route => {
+    const body = route.request().postDataJSON();
+    if (body.method !== "aiAccounts/action") { await route.fallback(); return; }
+    const auth = { id: sessionId, accountId, kind: "login", phase: failed ? "failed" : "awaiting_code", reasonCode: failed ? "authorization_state_mismatch" : null,
+      authorizationUrl: failed ? null : "https://claude.com/cai/oauth/authorize?code=true&client_id=test&state=test",
+      message: failed ? "raw output with example-private-code and example-private-token" : "Official CLI is waiting", startedAt: 1, updatedAt: 1 };
+    if (body.params.action === "input" && body.params.code === callback) {
+      await route.fulfill({ contentType: "application/json", body: JSON.stringify({ jsonrpc: "2.0", id: body.id, error: { code: -32000, message: "粘贴的是回调网址，不是授权返回码。请在官方授权页点击“复制授权码 / Copy code”，不要复制地址栏网址。" } }) });
+      return;
+    }
+    let result: unknown = auth;
+    if (["sync", "list"].includes(body.params.action)) result = { items: [], summary: { accounts: 0, authenticated: 0, quotaKnown: 0 } };
+    if (body.params.action === "input") { failed = true; result = { ...auth, phase: "failed", reasonCode: "authorization_state_mismatch" }; }
+    await route.fulfill({ contentType: "application/json", body: JSON.stringify({ jsonrpc: "2.0", id: body.id, result }) });
+  });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/connections/#claude");
+  await page.getByRole("button", { name: "登录 Claude Code", exact: true }).click();
+  await expect(page.getByText(/不要复制地址栏网址/)).toBeVisible();
+  await page.getByLabel("官方授权返回码", { exact: true }).fill(callback);
+  await page.getByRole("button", { name: "提交返回码", exact: true }).click();
+  await expect(page.getByRole("dialog").getByRole("alert")).toContainText("粘贴的是回调网址，不是授权返回码");
+  await expect(page.getByLabel("官方授权返回码", { exact: true })).toHaveValue("");
+  await page.getByLabel("官方授权返回码", { exact: true }).fill("example-private-code");
+  await page.getByRole("button", { name: "提交返回码", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "授权会话不匹配", exact: true })).toBeVisible();
+  await expect(page.getByRole("dialog").getByRole("alert")).toContainText("从当前 AImanager 窗口重新发起");
+  await expect(page.getByRole("dialog").getByRole("alert")).toContainText("authorization_state_mismatch");
+  await expect(page.getByRole("dialog")).not.toContainText("example-private");
+  await expect(page.getByLabel("官方授权返回码", { exact: true })).toHaveCount(0);
+  const browserStorage = await page.evaluate(() => JSON.stringify({ local: { ...localStorage }, session: { ...sessionStorage } }));
+  expect(browserStorage).not.toContain("example-private");
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+  await page.screenshot({ path: testInfo.outputPath("auth-state-mismatch-mobile.png"), animations: "disabled" });
+});
+
+test("managed CLI login explains legacy generic failures without inventing a cause", async ({ page }, testInfo) => {
+  await mockConsoleApi(page);
+  await page.route("**/api/rpc", async route => {
+    const body = route.request().postDataJSON();
+    if (body.method !== "aiAccounts/action") { await route.fallback(); return; }
+    const result = ["sync", "list"].includes(body.params.action) ? { items: [], summary: { accounts: 0, authenticated: 0, quotaKnown: 0 } }
+      : { id: "c".repeat(32), accountId: "a".repeat(32), kind: "login", phase: "failed", reasonCode: "authorization_not_verified", authorizationUrl: null, message: "Sign-in was not verified; retry in this profile or check server network/CLI compatibility", startedAt: 1, updatedAt: 1 };
+    await route.fulfill({ contentType: "application/json", body: JSON.stringify({ jsonrpc: "2.0", id: body.id, result }) });
+  });
+  await page.goto("/connections/#claude");
+  await page.getByRole("button", { name: "登录 Claude Code", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "登录尚未确认", exact: true })).toBeVisible();
+  await expect(page.getByRole("dialog")).toContainText("未返回可识别的具体原因");
+  await expect(page.getByRole("dialog")).toContainText("先同步登录状态");
+  await expect(page.getByRole("dialog")).not.toContainText("Sign-in was not verified");
+  await page.screenshot({ path: testInfo.outputPath("auth-unverified-desktop.png"), animations: "disabled" });
+});
+
 test("AI connection center distinguishes CLI installation from auth and probes private model catalogs", async ({ page }) => {
   const methods = await mockConsoleApi(page);
   await page.goto("/connections/");
@@ -509,21 +569,28 @@ test("the maintained account, analytics, session, and LabContext routes load thr
 });
 
 test("the Web console unlocks local workspaces when the loopback Router is ready", async ({ page }) => {
+  const connectionRequests: string[] = [];
+  page.on("request", request => {
+    if (new URL(request.url()).pathname.startsWith("/api/connections")) connectionRequests.push(request.url());
+  });
   await mockConsoleApi(page, true);
   await page.goto("/labcontext/");
 
-  await expect(page.getByText("LabContext 已完全连通")).toBeVisible();
+  await expect(page.getByText("LabContext 本机链路已就绪")).toBeVisible();
   const localButton = page.getByRole("button", { name: "本地电脑" }).first();
   await expect(localButton).toBeEnabled();
   await localButton.click();
   await expect(page.getByText("当前设备", { exact: true })).toBeVisible();
   await expect(page.getByText("Example Research", { exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "换号准备", exact: true })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "验证 ChatGPT 调用", exact: true })).toHaveCount(0);
 
   await page.getByRole("button", { name: "添加工作区" }).click();
   await page.getByRole("radio", { name: /本地电脑/ }).click();
   const root = page.getByLabel("本地项目目录");
   await expect(root).toBeEditable();
   await root.fill("/Users/research/project");
+  expect(connectionRequests).toEqual([]);
 });
 
 test("the connection center runs one-click recovery and reports an exact safe failure", async ({ page }) => {
@@ -537,7 +604,6 @@ test("the connection center runs one-click recovery and reports an exact safe fa
   await expect(page.getByText("停止服务器上的旧 LabContext SSH 会话后再次修复。")).toBeVisible();
   await expect(page.getByRole("button", { name: "再次修复" })).toBeVisible();
 });
-
 
 test("AI connections owns identity changes; usage stays focused on quotas without model catalogs", async ({ page }) => {
   const methods = await mockConsoleApi(page);
@@ -640,7 +706,7 @@ test("README screenshots show current screens using only isolated demo data", as
   await page.screenshot({ path: "test-results/readme-analytics.png", fullPage: true, animations: "disabled" });
 
   await page.goto("/labcontext/");
-  await expect(page.getByText("LabContext 已完全连通")).toBeVisible();
+  await expect(page.getByText("LabContext 本机链路已就绪")).toBeVisible();
   await expect(page.getByText("Example Research", { exact: true })).toBeVisible();
   await page.getByRole("button", { name: "收起", exact: true }).click();
   await page.screenshot({ path: "test-results/readme-workspaces.png", fullPage: true, animations: "disabled" });

@@ -21,6 +21,8 @@ from urllib.error import HTTPError, URLError
 from urllib.request import ProxyHandler, Request, build_opener
 
 from labcontext_router import DEFAULT_CONFIG_PATH, RouterError, load_config, parse_listen_addr
+from labcontext_connections import ConnectionError, ConnectionStore
+from labcontext_tunnel_control import TunnelControl
 
 
 DEFAULT_ENV_PATH = Path("~/.config/labcontext/launcher.env").expanduser()
@@ -282,7 +284,11 @@ def doctor(config_path: Path, values: dict[str, str]) -> int:
         print("SSH bridge: disabled")
     if parse_bool(values.get("LABCONTEXT_ENABLE_TUNNEL")):
         require_program(values.get("LABCONTEXT_TUNNEL_CLIENT", "tunnel-client"))
-        print(f"Secure MCP Tunnel: configured ({values.get('LABCONTEXT_TUNNEL_PROFILE', 'labcontext')})")
+        store = ConnectionStore(values)
+        profile = store.get()
+        if profile["credentialMode"] == "file":
+            store.environment(profile, {})  # Validate without printing or launching credentials.
+        print(f"Secure MCP Tunnel: configured ({profile['profile']})")
     else:
         print("Secure MCP Tunnel: disabled")
     runtime = fetch_router_status(address)
@@ -621,6 +627,7 @@ def write_runtime_status(
     path.parent.mkdir(parents=True, exist_ok=True)
     payload = {
         "schemaVersion": 1,
+        "tunnelControlVersion": 1,
         "launcherPid": os.getpid(),
         "startedAt": started_at,
         "updatedAt": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
@@ -718,7 +725,7 @@ def process_is_labcontext_component(
         host = values.get("LABCONTEXT_SSH_HOST", "")
         return bool(host) and "ExitOnForwardFailure=yes" in command and host in command
     if component_id == "secure-mcp-tunnel":
-        profile = values.get("LABCONTEXT_TUNNEL_PROFILE", "labcontext")
+        profile = ConnectionStore(values).get()["profile"]
         return "tunnel-client" in command and " run " in f" {command} " and f"--profile {profile}" in command
     if component_id == "local-provider":
         expected = local_provider_command(values)
@@ -1028,7 +1035,7 @@ def runtime_recovery_failure(status: dict[str, object] | None) -> dict[str, obje
             "summary": "OpenAI Tunnel 在重启后仍未就绪",
             "detail": str(tunnel.get("detail") or "Tunnel 健康检查失败"),
             "suggestions": ["检查 tunnel profile 和 OpenAI Tunnel 登录状态。"],
-            "command": "tunnel-client doctor --profile labcontext --explain",
+            "command": "labcontext connections reconnect",
         }
     return {
         "reasonCode": "recovery_verification_failed",
@@ -1166,8 +1173,8 @@ def recovery_worker(config_path: Path, values: dict[str, str]) -> int:
             write_recovery_status(values, {
                 **base,
                 "phase": "succeeded",
-                "summary": "一键修复完成，LabContext 已完全连通",
-                "detail": "Router、Provider、SSH 与 Tunnel 均已通过真实能力检查。",
+                "summary": "一键修复完成，LabContext 本机链路已恢复",
+                "detail": "Provider 真实调用及已启用传输检查通过；ChatGPT 插件需在目标账号单独验证。",
                 "launcherPid": launcher.pid,
                 "completedAt": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
             })
@@ -1214,6 +1221,7 @@ def run(config_path: Path, values: dict[str, str]) -> int:
     environment = process_environment(values)
     processes: list[tuple[str, subprocess.Popen[bytes]]] = []
     restart_commands: dict[str, list[str]] = {}
+    restart_environments: dict[str, dict[str, str]] = {}
     process_started: dict[str, float] = {}
     restart_after: dict[str, float] = {}
     restart_attempts: dict[str, int] = {}
@@ -1222,13 +1230,31 @@ def run(config_path: Path, values: dict[str, str]) -> int:
     shutting_down = False
     bridge_cleanup_attempted = False
 
-    def start_component(label: str, command: list[str], restart: bool = True) -> subprocess.Popen[bytes]:
-        process = subprocess.Popen(command, env=environment, start_new_session=True)
+    def start_component(label: str, command: list[str], restart: bool = True,
+                        component_env: dict[str, str] | None = None) -> subprocess.Popen[bytes]:
+        child_env = component_env if component_env is not None else environment
+        process = subprocess.Popen(command, env=child_env, start_new_session=True)
         processes.append((label, process))
         process_started[label] = time.monotonic()
         if restart:
             restart_commands[label] = command
+            restart_environments[label] = child_env
         return process
+
+    store = ConnectionStore(values)
+    tunnel_control: TunnelControl | None = None
+
+    def stop_tunnel() -> None:
+        owned = [(label, process) for label, process in processes if label == "Secure MCP Tunnel"]
+        stop_processes(owned)
+        processes[:] = [(label, process) for label, process in processes if label != "Secure MCP Tunnel"]
+        restart_commands.pop("Secure MCP Tunnel", None)
+        restart_after.pop("Secure MCP Tunnel", None)
+
+    def start_tunnel(profile: dict[str, object]) -> subprocess.Popen[bytes]:
+        client = require_program(values.get("LABCONTEXT_TUNNEL_CLIENT", "tunnel-client"))
+        return start_component("Secure MCP Tunnel", [client, "run", "--profile", str(profile["profile"])],
+                               component_env=store.environment(profile, environment))
 
     existing = fetch_router_status(address)
     if existing:
@@ -1274,8 +1300,11 @@ def run(config_path: Path, values: dict[str, str]) -> int:
         wait_for_router(address, router)
         if parse_bool(values.get("LABCONTEXT_ENABLE_TUNNEL")):
             client = require_program(values.get("LABCONTEXT_TUNNEL_CLIENT", "tunnel-client"))
-            profile = values.get("LABCONTEXT_TUNNEL_PROFILE", "labcontext")
-            start_component("Secure MCP Tunnel", [client, "run", "--profile", profile])
+            try:
+                start_tunnel(store.get())
+            except (ConnectionError, OSError):
+                print("labcontext: Tunnel could not start; check its dedicated credential file and run labcontext connections reconnect. Project services remain running.", file=sys.stderr)
+            tunnel_control = TunnelControl(store, environment, client, start_tunnel, stop_tunnel)
         write_runtime_status(
             status_path, started_at, processes, "running",
             process_started, restart_after, restart_attempts,
@@ -1290,6 +1319,8 @@ def run(config_path: Path, values: dict[str, str]) -> int:
             router_status = router.poll()
             if router_status is not None:
                 fail(f"LabContext Router exited unexpectedly with status {router_status}")
+            if tunnel_control:
+                tunnel_control.tick()
             now = time.monotonic()
             for index, (label, process) in enumerate(processes):
                 if label == "LabContext Router" or label not in restart_commands:
@@ -1329,7 +1360,7 @@ def run(config_path: Path, values: dict[str, str]) -> int:
                 if now < restart_after[label]:
                     continue
                 replacement = subprocess.Popen(
-                    restart_commands[label], env=environment, start_new_session=True,
+                    restart_commands[label], env=restart_environments[label], start_new_session=True,
                 )
                 processes[index] = (label, replacement)
                 process_started[label] = now
@@ -1378,6 +1409,8 @@ def main() -> int:
     subparsers.add_parser("repair", help="validate, stop a degraded stack, and restart it cleanly")
     subparsers.add_parser("restart", help="stop the current stack and start it with current configuration")
     subparsers.add_parser("stop", help="stop the current supervised stack cleanly")
+    from labcontext_connection_cli import add_parser, connections_command
+    add_parser(subparsers)
     args = parser.parse_args()
     values = load_env(args.env_file.expanduser())
     secret_env_file = values.get("LABCONTEXT_SECRET_ENV_FILE")
@@ -1390,6 +1423,15 @@ def main() -> int:
     values["LABCONTEXT_ENV_FILE"] = str(env_path)
     values["LABCONTEXT_ROUTER_CONFIG"] = str(config_path)
     values["LABCONTEXT_LAUNCHER_SCRIPT"] = str(Path(__file__).resolve())
+    # Select metadata only. Dedicated credentials are injected into the Tunnel
+    # child, never into Provider, Router or SSH subprocesses.
+    if args.command != "init":
+        try:
+            active = ConnectionStore(values).get()
+            values["LABCONTEXT_TUNNEL_PROFILE"] = active["profile"]
+            values["LABCONTEXT_TUNNEL_HEALTH_URL"] = active["healthUrl"]
+        except ConnectionError as exc:
+            fail(str(exc))
     values.setdefault("LABCONTEXT_RECOVERY_STATUS_FILE", str(DEFAULT_RECOVERY_STATUS_PATH))
     values.setdefault("LABCONTEXT_RECOVERY_LOG_FILE", str(DEFAULT_RECOVERY_LOG_PATH))
     for key in ("LABCONTEXT_RECOVERY_STATUS_FILE", "LABCONTEXT_RECOVERY_LOG_FILE"):
@@ -1398,6 +1440,12 @@ def main() -> int:
     if args.command == "init":
         args.config = config_path
         return init_config(args)
+    if args.command == "connections":
+        try:
+            address = parse_listen_addr(load_config(config_path).listen_addr)
+            return connections_command(args, values, router_base_url(address))
+        except ConnectionError as exc:
+            fail(str(exc))
     if args.command == "doctor":
         return doctor(config_path, values)
     if args.command == "status":

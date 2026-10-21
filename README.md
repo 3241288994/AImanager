@@ -296,6 +296,9 @@ labcontext doctor
 labcontext repair
 ```
 
+后台支持独立保存 Tunnel 接入配置，后续换号只调整接入层，不重装工作区或重启 SSH。
+运维命令与恢复边界见[ChatGPT 换号运维](docs/chatgpt-account-switch.md)，不新增前端管理入口。
+
 - 本机与服务器只开放明确授权的目录，文件大小、目录深度和响应内容均有预算限制。
 - 默认部署只监听回环地址；管理 RPC、数据库、账号令牌和 Provider admin token 不应公开。
 - 私有账号凭据、数据库与运行配置不应提交到公开仓库；发送给模型的项目内容受所选渠道的数据政策约束。

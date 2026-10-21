@@ -56,6 +56,7 @@ fn install_worker(root: &std::path::Path) -> Result<PathBuf, String> {
     }
     let script = root.join("worker.py");
     for (filename, content) in [
+        ("auth_diagnostics.py", include_str!("auth_diagnostics.py")),
         ("usage_history.py", include_str!("usage_history.py")),
         ("session_history.py", include_str!("session_history.py")),
         ("worker.py", WORKER),
@@ -202,6 +203,31 @@ pub(crate) fn action(params: Value) -> Result<Value, String> {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn installs_reviewed_auth_diagnostics_alongside_the_worker() {
+        let root = std::env::temp_dir().join(format!(
+            "aimanager-auth-worker-test-{}-{}",
+            std::process::id(),
+            rand::random::<u64>()
+        ));
+        let script = super::install_worker(&root).expect("install embedded worker");
+        assert_eq!(std::fs::read_to_string(script).unwrap(), super::WORKER);
+        let helper = root.join("auth_diagnostics.py");
+        assert_eq!(
+            std::fs::read_to_string(&helper).unwrap(),
+            include_str!("auth_diagnostics.py")
+        );
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            assert_eq!(
+                std::fs::metadata(&helper).unwrap().permissions().mode() & 0o077,
+                0
+            );
+        }
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
     #[test]
     fn rejects_arbitrary_operations_before_starting_any_process() {
         assert!(

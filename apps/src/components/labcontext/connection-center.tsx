@@ -220,14 +220,14 @@ export function ConnectionCenter({ status, error, isLoading, isFetching, onRetry
   const headline = isLoading
     ? "正在建立 LabContext 连接"
     : overall === "ready"
-      ? "LabContext 已完全连通"
+      ? "LabContext 本机链路已就绪"
       : overall === "degraded"
         ? "LabContext 当前为降级可用"
         : "LabContext 连接需要处理";
   const summary = isLoading
     ? "正在逐层验证 Router、Provider、SSH 与 OpenAI Tunnel。"
     : overall === "ready"
-      ? "能力验证已完成，可以在 ChatGPT 中使用所有已配置来源。"
+      ? "Router、Provider 与已启用传输检查通过；ChatGPT 插件的实际可用性以工具调用结果为准。"
       : status
         ? "至少一个环节未通过真实调用验证；下方会保留诊断信息。"
         : "本机 Router 无法访问。若后台服务已配置，请运行 labcontext status 查看原因。";
@@ -244,7 +244,7 @@ export function ConnectionCenter({ status, error, isLoading, isFetching, onRetry
               <div className="flex flex-wrap items-center gap-2">
                 <CardTitle className="text-base">{headline}</CardTitle>
                 <Badge variant={overall === "ready" ? "secondary" : "outline"}>
-                  {overall === "ready" ? "完全可用" : overall === "degraded" ? "降级可用" : isLoading ? "检查中" : "需要处理"}
+                  {overall === "ready" ? "本机检查通过" : overall === "degraded" ? "降级可用" : isLoading ? "检查中" : "需要处理"}
                 </Badge>
               </div>
               <CardDescription className="mt-1 break-words">{summary}</CardDescription>
@@ -330,7 +330,7 @@ export function ConnectionCenter({ status, error, isLoading, isFetching, onRetry
             </div>
           ) : null}
           <div className="flex flex-col gap-2 rounded-xl border border-primary/15 bg-primary/5 px-3.5 py-3 text-xs text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
-            <span>“端口存在”不再等于“连接成功”：只有身份、版本、工具清单和真实调用全部通过才会显示完全可用。</span>
+            <span>“端口存在”不等于“连接成功”：Provider 身份、版本、工具和真实调用通过后才显示本机检查通过；ChatGPT 插件需单独验证。</span>
             {status?.checkedAt ? <span className="shrink-0">检查于 {new Date(status.checkedAt).toLocaleTimeString()}</span> : null}
           </div>
         </CardContent>

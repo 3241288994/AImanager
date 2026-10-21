@@ -26,6 +26,7 @@ from typing import Any
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode
 from urllib.request import ProxyHandler, Request, build_opener
+from labcontext_connections import ConnectionError, ConnectionStore
 
 try:
     import tomllib
@@ -34,7 +35,7 @@ except ModuleNotFoundError:  # Python 3.9/3.10 compatibility
 
 
 PROTOCOL_VERSION = "2025-06-18"
-ROUTER_VERSION = "0.4.0"
+ROUTER_VERSION = "0.5.0"
 DEFAULT_LISTEN_ADDR = "127.0.0.1:1460"
 DEFAULT_CONFIG_PATH = Path("~/.config/labcontext/config.toml").expanduser()
 DEFAULT_STATUS_PATH = Path("~/.local/state/labcontext-router/launcher-status.json").expanduser()
@@ -333,6 +334,7 @@ class LabContextRouter:
         self._status_cache: tuple[float, list[dict[str, Any]]] | None = None
         self._cache_lock = threading.Lock()
         self._recovery_lock = threading.Lock()
+        self.connections = ConnectionStore(os.environ)
         self._opener = build_opener(ProxyHandler({}))
 
     @staticmethod
@@ -370,6 +372,8 @@ class LabContextRouter:
 
     def start_recovery(self) -> dict[str, Any]:
         with self._recovery_lock:
+            if self.connections.public()["operation"].get("phase") in {"queued", "checking", "verifying"}:
+                raise RouterError("Tunnel 接入操作正在进行，请等待结果后再执行整套修复。")
             current = self.recovery_status()
             if current.get("phase") in {"queued", "diagnosing", "restarting", "verifying"}:
                 return current
@@ -562,7 +566,17 @@ class LabContextRouter:
     def _tunnel_status(self) -> dict[str, Any]:
         if os.environ.get("LABCONTEXT_ENABLE_TUNNEL", "").strip().lower() not in {"1", "true", "yes", "on"}:
             return {"enabled": False, "status": "disabled", "detail": "未启用 Secure MCP Tunnel"}
-        base = os.environ.get("LABCONTEXT_TUNNEL_HEALTH_URL", DEFAULT_TUNNEL_HEALTH_URL).rstrip("/")
+        launcher = self._launcher_status()
+        if launcher.get("tunnelControlVersion") == 1 and not any(
+                item.get("id") == "secure-mcp-tunnel" for item in launcher.get("components", [])):
+            return {"enabled": True, "status": "unavailable", "detail": "托管 Tunnel 尚未启动；检查当前接入的凭据文件，再仅重连 Tunnel。项目服务保持运行。"}
+        try:
+            access = self.connections.public()
+            if access["operation"].get("phase") in {"queued", "checking", "verifying"}:
+                return {"enabled": True, "status": "unavailable", "detail": "Tunnel 接入操作正在进行，等待能力复验"}
+            base = self.connections.get()["healthUrl"].rstrip("/")
+        except ConnectionError:
+            return {"enabled": True, "status": "unavailable", "detail": "接入配置无效，请运行 labcontext connections list 检查"}
         started = time.monotonic()
         request = Request(f"{base}/readyz", headers={"Accept": "text/plain"}, method="GET")
         try:
@@ -618,7 +632,25 @@ class LabContextRouter:
             "launcher": launcher,
             "providers": providers,
             "tunnel": tunnel,
+            "verificationScope": "local_stack",
         }
+
+    def access_status(self) -> dict[str, Any]:
+        """Internal CLI control status, not a frontend account-management API."""
+        data = self.connections.public()
+        launcher = self._launcher_status()
+        data["canReconnect"] = (launcher.get("status") == "running" and launcher.get("tunnelControlVersion") == 1
+                                and os.environ.get("LABCONTEXT_ENABLE_TUNNEL", "").strip().lower() in {"1", "true", "yes", "on"})
+        return data
+
+    def access_action(self, payload: dict[str, Any]) -> dict[str, Any]:
+        with self._recovery_lock:
+            if not self.access_status()["canReconnect"]:
+                raise RouterError("当前启动器不支持仅重连 Tunnel。请更新本机 labcontext 并重启一次；不会自动重建 SSH 或 Provider。")
+            if self.recovery_status().get("phase") in {"queued", "diagnosing", "restarting", "verifying"}:
+                raise RouterError("整套修复正在进行，请等待完成。")
+            return self.connections.request(str(payload.get("action", "")), str(payload.get("connectionId", "")),
+                                            self._launcher_status()["launcherPid"])
 
     def _tools(self, force: bool = False) -> tuple[list[dict[str, Any]], dict[str, set[str]]]:
         with self._cache_lock:
@@ -959,6 +991,19 @@ class RouterHandler(BaseHTTPRequestHandler):
         if origin and not self._origin_allowed():
             raise RouterError(f"origin is not allowed: {origin}")
 
+    def _require_local_management(self) -> None:
+        # Reject DNS rebinding and cross-origin form submissions. CLI requests
+        # may omit Origin, but must still address this loopback host directly.
+        from urllib.parse import urlsplit
+        try:
+            host = urlsplit("http://" + self.headers.get("Host", "")).hostname
+        except ValueError:
+            host = None
+        if host not in {"127.0.0.1", "localhost"}:
+            raise RouterError("connection management requires a loopback Host")
+        if self.command == "POST" and self.headers.get_content_type() != "application/json":
+            raise RouterError("connection management requires application/json")
+
     def _headers(self, status: int, content_type: str = "application/json; charset=utf-8") -> None:
         self.send_response(status)
         self.send_header("Content-Type", content_type)
@@ -1013,8 +1058,12 @@ class RouterHandler(BaseHTTPRequestHandler):
             if self.path == "/api/recovery":
                 self._json(HTTPStatus.OK, self.router.recovery_status())
                 return
+            if self.path == "/api/connections":
+                self._require_local_management()
+                self._json(HTTPStatus.OK, self.router.access_status())
+                return
             self._json(HTTPStatus.NOT_FOUND, {"error": "not_found"})
-        except RouterError as exc:
+        except (RouterError, ConnectionError) as exc:
             self._json(HTTPStatus.FORBIDDEN, {"error": str(exc)})
 
     def do_DELETE(self) -> None:  # noqa: N802
@@ -1055,6 +1104,10 @@ class RouterHandler(BaseHTTPRequestHandler):
             if self.path == "/api/recovery/repair":
                 self._json(HTTPStatus.ACCEPTED, self.router.start_recovery())
                 return
+            if self.path == "/api/connections/action":
+                self._require_local_management()
+                self._json(HTTPStatus.ACCEPTED, self.router.access_action(payload))
+                return
             prefix = "/api/admin/"
             suffix = "/call"
             if self.path.startswith(prefix) and self.path.endswith(suffix):
@@ -1064,7 +1117,7 @@ class RouterHandler(BaseHTTPRequestHandler):
                 self._json(HTTPStatus.OK, {"result": result})
                 return
             self._json(HTTPStatus.NOT_FOUND, {"error": "not_found"})
-        except RouterError as exc:
+        except (RouterError, ConnectionError) as exc:
             self._json(HTTPStatus.BAD_REQUEST, {"error": str(exc)})
         except Exception as exc:  # pragma: no cover - defensive server boundary
             self._json(HTTPStatus.INTERNAL_SERVER_ERROR, {"error": f"router failure: {exc}"})

@@ -117,6 +117,47 @@ class AiAccountTest(unittest.TestCase):
         self.fake.write_text(FAKE_CLI.replace("Paste authorization code:", "Authorization code...shift"), encoding="utf-8")
         self.login(self.create())
 
+    def test_callback_url_is_not_sent_to_cli_and_the_same_session_can_still_finish(self):
+        item = self.create()
+        session = worker.dispatch(self.root, {"action": "login", "accountId": item["id"]})
+        self.wait_phase(session, {"awaiting_code"})
+        directory = worker.session_path(self.root, session["id"])
+        with self.assertRaisesRegex(ValueError, "回调网址，不是授权返回码") as raised:
+            worker.dispatch(self.root, {"action": "input", "sessionId": session["id"], "inputAction": "code", "code": "https://platform.claude.com/oauth/code/callback?code=private-example&state=private-state"})
+        self.assertNotIn("private-example", str(raised.exception))
+        self.assertFalse((directory / "input.json").exists())
+        self.assertEqual(worker.dispatch(self.root, {"action": "session", "sessionId": session["id"]})["phase"], "awaiting_code")
+        worker.dispatch(self.root, {"action": "input", "sessionId": session["id"], "inputAction": "code", "code": "valid-code"})
+        self.assertEqual(self.wait_phase(session, worker.FINAL)["phase"], "succeeded")
+
+    def test_cli_failure_returns_a_safe_reason_and_next_step(self):
+        marker = "    sys.exit(1)\nprint('Welcome"
+        self.assertIn(marker, FAKE_CLI)
+        source = FAKE_CLI.replace(marker, "    print('OAuth error: Invalid code. example-private-code example-private-state', flush=True)\n" + marker)
+        self.fake.write_text(source, encoding="utf-8")
+        item = self.create()
+        session = worker.dispatch(self.root, {"action": "login", "accountId": item["id"]})
+        self.wait_phase(session, {"awaiting_code"})
+        worker.dispatch(self.root, {"action": "input", "sessionId": session["id"], "inputAction": "code", "code": "example-private-code"})
+        status = self.wait_phase(session, worker.FINAL)
+        self.assertEqual(status["phase"], "failed")
+        self.assertEqual(status["reasonCode"], "authorization_code_invalid")
+        self.assertIn("重新发起授权", status["message"])
+        for secret in ("example-private-code", "example-private-state"):
+            self.assertNotIn(secret, json.dumps(status))
+            self.assertNotIn(secret, (worker.session_path(self.root, session["id"]) / "status.json").read_text())
+
+    def test_expired_session_has_actionable_reason_and_rejects_late_input(self):
+        item = self.create()
+        session_id = "e" * 32
+        directory = worker.private_dir(self.root / "sessions" / session_id)
+        worker.write_json(directory / "status.json", {"id": session_id, "accountId": item["id"], "kind": "login", "phase": "awaiting_code", "startedAt": int(time.time()) - 1000, "updatedAt": int(time.time()) - 1000})
+        status = worker.dispatch(self.root, {"action": "session", "sessionId": session_id})
+        self.assertEqual(status["phase"], "expired")
+        self.assertEqual(status["reasonCode"], "session_expired")
+        with self.assertRaisesRegex(ValueError, "会话已结束"):
+            worker.dispatch(self.root, {"action": "input", "sessionId": session_id, "inputAction": "code", "code": "late-code"})
+        self.assertFalse((directory / "input.json").exists())
     def test_rejects_arbitrary_action_and_paths(self):
         for request in [{"action": "shell"}, {"action": "select", "accountId": "../../credentials"}, {"action": "session", "sessionId": "../a"}]:
             with self.assertRaises(ValueError):

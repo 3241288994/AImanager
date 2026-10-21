@@ -8,6 +8,7 @@ import { aiAccountsClient, FINAL_AUTH_PHASES, type AiAuthSession } from "@/lib/a
 import { getAppErrorMessage } from "@/lib/api/transport";
 
 const SESSION_KEY = "aimanager.cli-auth-session";
+const ERROR_TOAST_ID = "aimanager.cli-auth-error";
 const useSessionStore = create<{ id: string | null; setId: (id: string | null) => void }>(set => ({
   id: null,
   setId: id => {
@@ -35,6 +36,7 @@ export function useManagedCliSession() {
   const client = useQueryClient();
   const { id, setId } = useSessionStore();
   const [busy, setBusy] = useState(false);
+  const [operationError, setOperationError] = useState<string | null>(null);
   useEffect(() => {
     const saved = sessionStorage.getItem(SESSION_KEY);
     if (saved && /^[a-f0-9]{32}$/.test(saved)) setId(saved);
@@ -50,14 +52,18 @@ export function useManagedCliSession() {
     }
   }, [session.data, client]);
   async function run(operation: () => Promise<unknown>) {
+    toast.dismiss(ERROR_TOAST_ID);
     setBusy(true);
+    setOperationError(null);
     try { await operation(); await client.invalidateQueries({ queryKey: ["ai-accounts"] }); }
-    catch (error) { toast.error(getAppErrorMessage(error)); }
+    catch (error) { const message = getAppErrorMessage(error); setOperationError(message); toast.error(message, { id: ERROR_TOAST_ID }); }
     finally { setBusy(false); }
   }
   function start(value: AiAuthSession) {
+    toast.dismiss(ERROR_TOAST_ID);
+    setOperationError(null);
     client.setQueryData(["ai-auth-session", value.id], value);
     setId(value.id);
   }
-  return { id, close: () => setId(null), session, busy, run, start, live: Boolean(session.data && !FINAL_AUTH_PHASES.has(session.data.phase)) };
+  return { id, close: () => { toast.dismiss(ERROR_TOAST_ID); setOperationError(null); setId(null); }, session, busy, operationError, run, start, live: Boolean(session.data && !FINAL_AUTH_PHASES.has(session.data.phase)) };
 }

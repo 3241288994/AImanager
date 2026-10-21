@@ -39,13 +39,15 @@ test("本地工作区通过桌面壳或可选回环 Router 暴露", async () => 
   assert.match(hook, /labContextClient\.pickLocalWorkspaceDirectory/);
   assert.match(page, /localEnabled=\{localEnabled\}/);
   assert.match(page, /<ConnectionCenter/);
+  assert.doesNotMatch(page + routerClient + connectionCenter, /ChatGptAccessPanel|useChatGptAccess|\/api\/connections|换号准备/);
   assert.match(connectionCenter, /端口存在/);
   assert.match(connectionCenter, /复制诊断/);
   assert.match(connectionCenter, /一键修复/);
   assert.match(connectionCenter, /requestLabContextRepair/);
   assert.match(connectionCenter, /getLabContextRecoveryStatus/);
   assert.match(connectionCenter, /真实调用/);
-  assert.match(recovery, /labcontext doctor && labcontext repair/);
+  assert.match(recovery, /command: "labcontext repair"/);
+  assert.doesNotMatch(recovery, /doctor && labcontext (?:repair|restart)/);
   assert.match(recovery, /SSH 桥接没有建立成功/);
   assert.match(routerClient, /\/api\/status/);
   assert.match(routerClient, /\/api\/recovery\/repair/);

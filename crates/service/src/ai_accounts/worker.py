@@ -86,6 +86,14 @@ def usage_history_module():
     return module
 
 
+def auth_diagnostics_module():
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("aimanager_auth_diagnostics", Path(__file__).with_name("auth_diagnostics.py"))
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
 def update_account(root, account_id, **patch):
     with registry(root) as value:
         for item in value["accounts"]:
@@ -462,6 +470,7 @@ def run_session(root, session_id):
     home, env = profile_env(root, item)
     binary = native(item["provider"])
     kind = status["kind"]
+    diagnostics = auth_diagnostics_module()
     if kind == "usage" and item["provider"] == "claude" and refresh_claude_quota(root, item, directory, status):
         return
     args = [binary, "auth", "login", "--claudeai"] if item["provider"] == "claude" and kind == "login" else [binary]
@@ -471,10 +480,13 @@ def run_session(root, session_id):
         os.execve(binary, args, env)
     fcntl.ioctl(terminal, termios.TIOCSWINSZ, struct.pack("HHHH", 60, 240, 0, 0))
     text = ""
+    plain = ""
     sent_usage = False
     authenticated = False
     deadline = time.monotonic() + (900 if kind == "login" else 60)
     def publish(phase, message, url=None):
+        if phase in {"succeeded", "cancelled"}:
+            status.pop("reasonCode", None)
         status.update(phase=phase, message=message, authorizationUrl=url, updatedAt=int(time.time()))
         write_json(directory / "status.json", status)
     publish("starting", "Waiting for the official CLI")
@@ -498,6 +510,9 @@ def run_session(root, session_id):
             plain = strip_terminal(text)
             url = auth_url(text) or auth_url(plain)
             if kind == "login":
+                failure = diagnostics.detect_login_failure(plain)
+                if failure:
+                    status["reasonCode"] = failure["reasonCode"]
                 if item["provider"] == "antigravity":
                     saved = saved_antigravity_auth(root, item)
                     if saved.get("authStatus") == "authenticated" and saved.get("credentialSavedAt", 0) >= status["startedAt"]:
@@ -505,7 +520,7 @@ def run_session(root, session_id):
                         authenticated = True
                         break
                 if authorization_code_prompt(plain):
-                    publish("awaiting_code", "Open the official authorization page, then paste its returned code here", url)
+                    publish("awaiting_code", failure["message"] if failure else "请复制官方页面显示的完整返回码，不要复制地址栏网址；返回码须提交到本次授权窗口。", url)
                 elif url:
                     publish("awaiting_browser", "Complete authorization in your browser; do not share this temporary link", url)
                 elif confirmation_prompt(plain):
@@ -545,10 +560,12 @@ def run_session(root, session_id):
                 if incoming.get("action") == "confirm" and status["phase"] == "needs_confirmation":
                     os.write(terminal, b"\r")
                     text = ""
+                    status.pop("reasonCode", None)
                 elif incoming.get("action") == "code" and status["phase"] == "awaiting_code":
                     code = incoming["code"]
                     os.write(terminal, code.encode("utf-8") + b"\r")
                     text = ""
+                    status.pop("reasonCode", None)
                     publish("verifying", "The official CLI is verifying authorization; code is not retained")
             ended, exit_status = os.waitpid(child, os.WNOHANG)
             if ended:
@@ -569,14 +586,10 @@ def run_session(root, session_id):
             if authenticated:
                 publish("succeeded", "Official CLI sign-in completed for this isolated account")
             else:
-                reason = "authorization_not_verified"
-                message = "Sign-in was not verified; retry in this profile or check server network/CLI compatibility"
-                if re.search(r"timeout|timed out|connection refused|ECONN|TLS|proxy|failed to connect|network|unexpected EOF", plain, re.I):
-                    reason, message = "network_unavailable", "Official CLI cannot reach its authentication service; check server proxy, DNS and TLS"
-                elif re.search(r"keyring|keychain|secret service|dbus", plain, re.I):
-                    reason, message = "credential_store_unavailable", "The official CLI could not initialize its isolated credential store"
-                status["reasonCode"] = reason
-                publish("expired" if time.monotonic() >= deadline else "failed", message)
+                timed_out = time.monotonic() >= deadline
+                failure = diagnostics.login_failure(plain, timed_out, checked.get("authNote", ""))
+                status["reasonCode"] = failure["reasonCode"]
+                publish("expired" if timed_out else "failed", failure["message"])
         else:
             reason = status.get("reasonCode") or ("network_unavailable" if re.search(r"timeout|timed out|connection refused|ECONN|TLS|proxy|failed to connect|network|unexpected EOF", plain, re.I) else "quota_not_reported")
             note = status["message"] if reason == "onboarding_required" else ("网络连接失败，请检查代理后重试。" if reason == "network_unavailable" else "官方 CLI 未返回可识别额度，请完成终端初始化后重试。")
@@ -669,26 +682,30 @@ def dispatch(root, request):
         directory = session_path(root, request.get("sessionId"))
         status = read_json(directory / "status.json")
         if not status:
-            raise ValueError("Unknown authorization session")
+            raise ValueError("找不到本次授权会话。请关闭旧窗口，重新发起网页登录，不要提交其他窗口生成的返回码。")
         if status.get("kind") == "login" and status.get("phase") not in {"succeeded", "cancelled"}:
             item = account(root, status["accountId"])
             if item.get("authStatus") == "authenticated" and (item.get("credentialSavedAt", 0) >= status.get("startedAt", 0) or item.get("checkedAt", 0) >= status.get("startedAt", 0)):
                 status.update(phase="succeeded", authorizationUrl=None, reasonCode=None, message="官方 CLI 登录已同步", updatedAt=int(time.time()))
                 write_json(directory / "status.json", status)
         if status.get("phase") not in FINAL and time.time() - status.get("updatedAt", 0) > 960:
-            status.update(phase="expired", authorizationUrl=None, message="Session expired; start a new authorization")
+            status.update(phase="expired", authorizationUrl=None, **auth_diagnostics_module().diagnostic("session_expired"))
+            write_json(directory / "status.json", status)
         if action == "cancel":
             write_json(directory / "cancel.json", {"cancel": True})
         if action == "input":
             if request.get("inputAction") == "confirm" and status["phase"] == "needs_confirmation":
                 write_json(directory / "input.json", {"action": "confirm"})
             elif request.get("inputAction") == "code" and status["phase"] == "awaiting_code":
-                code = request.get("code", "")
-                if not isinstance(code, str) or not re.fullmatch(r"[A-Za-z0-9_.~:#/@?=&%+\-]{1,2048}", code):
-                    raise ValueError("Invalid authorization code; do not submit a password or a shell command")
+                item = account(root, status["accountId"])
+                code = auth_diagnostics_module().validate_code(request.get("code", ""), item["provider"])
                 write_json(directory / "input.json", {"action": "code", "code": code})
             else:
-                raise ValueError("This session is not waiting for that input")
+                if status["phase"] == "succeeded":
+                    raise ValueError("本次登录已经完成，无需重复提交。请关闭窗口并同步登录状态。")
+                if status["phase"] in FINAL:
+                    raise ValueError("本次授权会话已结束。请重新发起网页登录，只提交新窗口对应的返回码。")
+                raise ValueError("当前会话尚未等待此操作，请按窗口提示继续；验证过程中不要重复提交返回码。")
         return public_session(status)
     raise ValueError("Unsupported CLI account operation")
 
