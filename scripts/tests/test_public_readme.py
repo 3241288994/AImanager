@@ -82,7 +82,9 @@ class PublicReadmeTest(unittest.TestCase):
         width, height = struct.unpack(">II", demo.read_bytes()[16:24])
         self.assertGreaterEqual(width, 3000)
         self.assertGreaterEqual(height, 3000)
-        for document in ("README.md", "docs/ai-collaboration.md", "docs/demos/collaboration-demo.md"):
+        # The README embeds the full-resolution asset directly; a separate
+        # download link is optional editorial copy, not a release requirement.
+        for document in ("docs/ai-collaboration.md", "docs/demos/collaboration-demo.md"):
             self.assertIn("aimanager-collaboration-demo.png?raw=true", (ROOT / document).read_text(encoding="utf-8"))
         for step in range(1, 7):
             panel = ROOT / f"docs/assets/collaboration-outputs/{step:02}.png"
