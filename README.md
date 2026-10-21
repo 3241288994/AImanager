@@ -61,7 +61,6 @@
   <img width="960" alt="模型原始输出节选截图拼接：Codex CLI 复现问题，Claude Code 审阅，Gemini API 引用双方分析，Claude 采纳并修正、修改代码，Codex 独立复测通过" src="docs/assets/aimanager-collaboration-demo.png" />
 </p>
 
-[查看高清原图（3360 × 3366，无损 PNG）](docs/assets/aimanager-collaboration-demo.png?raw=true)
 
 上图是隔离示例的**模型原始输出节选截图拼接**，保留原话，省略处以 … 标记，步骤编号与重点下划线为后加标注。
 Codex CLI 复现失败，Claude Code 独立审阅，Gemini API 引用双方分析并提出建议；
