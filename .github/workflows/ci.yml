@@ -50,7 +50,8 @@ jobs:
         run: cargo test --workspace --locked -- --test-threads=1
 
   desktop-shell:
-    runs-on: macos-14
+    # macOS 14 retires on 2026-11-02 and is already subject to image brownouts.
+    runs-on: macos-15
     steps:
       - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@stable
