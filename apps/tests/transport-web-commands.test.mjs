@@ -118,6 +118,7 @@ test("login mapping preserves the selected login type and disables remote browse
     type: "chatgpt",
     openBrowser: false,
   });
+  assert.equal(descriptor.mapParams({loginType:"chatgptDeviceCode"}).type, "chatgptDeviceCode");
 });
 
 test("all maintained LabContext operations map to the typed service RPC surface", () => {

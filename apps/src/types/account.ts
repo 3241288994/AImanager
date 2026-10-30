@@ -29,6 +29,8 @@ export interface Account {
   planTypeRaw: string | null;
   hasSubscription: boolean | null;
   subscriptionPlan: string | null;
+  planMonthlyUsd?: number | null;
+  planPriceSource?: string | null;
   subscriptionExpiresAt: number | null;
   subscriptionRenewsAt: number | null;
   note: string | null;

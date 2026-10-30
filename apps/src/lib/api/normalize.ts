@@ -75,6 +75,8 @@ function normalizeAccount(value: unknown, usage?: AccountUsage | null): Account 
     planTypeRaw: string(source.planTypeRaw ?? source.plan_type_raw) || null,
     hasSubscription: typeof (source.hasSubscription ?? source.has_subscription) === "boolean" ? Boolean(source.hasSubscription ?? source.has_subscription) : null,
     subscriptionPlan: string(source.subscriptionPlan ?? source.subscription_plan) || null,
+    planMonthlyUsd: toNullableNumber(source.planMonthlyUsd ?? source.plan_monthly_usd),
+    planPriceSource: string(source.planPriceSource ?? source.plan_price_source) || null,
     subscriptionExpiresAt: toNullableNumber(source.subscriptionExpiresAt ?? source.subscription_expires_at),
     subscriptionRenewsAt: toNullableNumber(source.subscriptionRenewsAt ?? source.subscription_renews_at),
     note: string(source.note) || null,

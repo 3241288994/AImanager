@@ -10,6 +10,53 @@ use codexmanager_core::storage::{now_ts, Account, Storage};
 use reqwest::header::{HeaderMap, HeaderValue};
 use reqwest::Client;
 
+#[test]
+fn device_pending_json_is_not_confused_with_a_verification_page() {
+    let mut headers = HeaderMap::new();
+    assert!(!super::device_verification_page(&headers));
+    headers.insert("content-type", HeaderValue::from_static("application/json"));
+    assert!(!super::device_verification_page(&headers));
+    headers.insert("cf-ray", HeaderValue::from_static("ordinary-request"));
+    assert!(!super::device_verification_page(&headers));
+    headers.insert("cf-mitigated", HeaderValue::from_static("challenge"));
+    assert!(super::device_verification_page(&headers));
+    headers.remove("cf-mitigated");
+    headers.insert("content-type", HeaderValue::from_static("text/html; charset=UTF-8"));
+    assert!(super::device_verification_page(&headers));
+}
+
+#[test]
+fn device_poll_stops_on_cloudflare_html_instead_of_waiting_fifteen_minutes() {
+    let server = tiny_http::Server::http("127.0.0.1:0").unwrap();
+    let issuer = format!("http://{}", server.server_addr());
+    let responder = std::thread::spawn(move || {
+        let request = server.recv_timeout(std::time::Duration::from_secs(5)).unwrap().unwrap();
+        request.respond(tiny_http::Response::from_string("<html><title>Just a moment...</title></html>")
+            .with_status_code(403)
+            .with_header(tiny_http::Header::from_bytes("Content-Type", "text/html").unwrap())).unwrap();
+    });
+    let result = super::run_auth_future(super::poll_device_auth_token_async(&issuer, "synthetic-device", "TEST-CODE", 5));
+    responder.join().unwrap();
+    assert!(matches!(result, Err(ref error) if error == super::DEVICE_VERIFICATION_REQUIRED));
+}
+
+#[test]
+fn device_poll_keeps_json_pending_responses_then_accepts_authorization() {
+    let server = tiny_http::Server::http("127.0.0.1:0").unwrap();
+    let issuer = format!("http://{}", server.server_addr());
+    let responder = std::thread::spawn(move || {
+        for status in [403, 404, 200] {
+            let request = server.recv_timeout(std::time::Duration::from_secs(5)).unwrap().unwrap();
+            let body = if status == 200 { r#"{"authorization_code":"synthetic-code","code_challenge":"test","code_verifier":"synthetic-verifier"}"# } else { r#"{"status":"pending"}"# };
+            request.respond(tiny_http::Response::from_string(body).with_status_code(status)
+                .with_header(tiny_http::Header::from_bytes("Content-Type", "application/json").unwrap())).unwrap();
+        }
+    });
+    let result = super::run_auth_future(super::poll_device_auth_token_async(&issuer, "synthetic-device", "TEST-CODE", 1)).unwrap();
+    responder.join().unwrap();
+    assert_eq!(result.authorization_code, "synthetic-code");
+}
+
 /// 函数 `build_account`
 ///
 /// 作者: gaohongshun
@@ -121,6 +168,23 @@ fn pick_existing_account_matches_exact_workspace_scope() {
 fn build_account_storage_id_keeps_login_scope_shape() {
     let account_id = build_account_storage_id("sub-1", Some("cgpt-1"), Some("ws-a"), None);
     assert_eq!(account_id, "sub-1::cgpt=cgpt-1|ws=ws-a");
+}
+
+#[test]
+fn oauth_workspace_fallback_reuses_resolved_same_subject_identity() {
+    let account = build_account("sub::cgpt=cgpt-1|ws=org", Some("cgpt-1"), Some("org"));
+    assert_eq!(pick_existing_account_id_by_identity([&account], Some("cgpt-1"), Some("cgpt-1"), Some("sub"), None), Some(account.id.clone()));
+    assert_eq!(pick_existing_account_id_by_identity([&account], Some("cgpt-1"), Some("cgpt-1"), Some("other-sub"), None), None);
+    let second = build_account("sub::cgpt=cgpt-1|ws=other", Some("cgpt-1"), Some("other"));
+    assert_eq!(pick_existing_account_id_by_identity([&account, &second], Some("cgpt-1"), Some("cgpt-1"), Some("sub"), None), None);
+}
+
+#[test]
+fn exact_duplicate_prefers_active_account() {
+    let mut old = build_account("sub::cgpt=cgpt-1|ws=org", Some("cgpt-1"), Some("org"));
+    old.status = "unavailable".into();
+    let new = build_account("sub::cgpt=cgpt-1", Some("cgpt-1"), Some("org"));
+    assert_eq!(pick_existing_account_id_by_identity([&old, &new], Some("cgpt-1"), Some("org"), Some("sub"), None), Some(new.id));
 }
 
 /// 函数 `next_account_sort_uses_step_five`

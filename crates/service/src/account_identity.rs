@@ -171,7 +171,17 @@ pub(crate) fn pick_existing_account_id_by_identity<'a, I>(
 where
     I: IntoIterator<Item = &'a Account>,
 {
-    let accounts = accounts.into_iter().collect::<Vec<_>>();
+    let mut accounts = accounts.into_iter().collect::<Vec<_>>();
+    if let Some(subject) = normalize_non_empty(fallback_subject_key) {
+        accounts.retain(|account| account.id.split_once("::").is_none_or(|(stored, _)| {
+            stored == subject.split("::").next().unwrap_or(subject)
+        }));
+    }
+    // A renewed login must not revive the first (often stale) duplicate simply
+    // because it has a lower sort value. Preserve the live identity instead.
+    accounts.sort_by_key(|account| std::cmp::Reverse((
+        account.status == "active", account.updated_at, account.created_at,
+    )));
     let preferred_chatgpt = normalize_non_empty(chatgpt_account_id).map(str::to_string);
     let preferred_workspace = normalize_non_empty(workspace_id).map(str::to_string);
 
@@ -183,6 +193,23 @@ where
                 && same_normalized(acc.workspace_id.as_deref(), Some(workspace_id.as_str()))
         }) {
             return Some(found.id.clone());
+        }
+        // OAuth sometimes only supplies the account ID as a workspace fallback;
+        // a later usage response supplies the organization ID. Reuse an existing
+        // record only for the same subject and an unambiguous workspace.
+        let subject = normalize_non_empty(fallback_subject_key);
+        let candidates = accounts.iter().filter(|acc| {
+            subject.is_some_and(|subject| {
+                acc.id == subject || acc.id.starts_with(&format!("{subject}::"))
+            }) && same_normalized(acc.chatgpt_account_id.as_deref(), Some(chatgpt_id))
+                && (workspace_id == chatgpt_id
+                    || normalize_non_empty(acc.workspace_id.as_deref()).is_none()
+                    || acc.workspace_id.as_deref() == Some(chatgpt_id))
+        }).collect::<Vec<_>>();
+        let scopes = candidates.iter().map(|acc| acc.workspace_id.as_deref())
+            .collect::<std::collections::HashSet<_>>();
+        if scopes.len() == 1 {
+            return candidates.first().map(|acc| acc.id.clone());
         }
         return None;
     }

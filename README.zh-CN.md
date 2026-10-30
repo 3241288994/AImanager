@@ -171,6 +171,10 @@ Claude Code 的 Token 统计来自服务主机已保存的会话日志；Antigra
 
 详细说明：[AI 接入与额度](docs/ai-connections.md) · [用量分析](docs/usage-analytics.md) · [CLI 会话恢复](docs/cli-sessions.md)
 
+Codex 可同时切换服务器与已接入 Mac 的默认账号，两端保留独立授权。
+空闲会话无需退出；任务执行中先排队，每 2 秒复查。Free 按当前权益识别，已确认的月度美元 Pro 档位可显示为 `Pro 200$`。
+[登录、双端配对、换号与套餐标签](docs/codex-account-activation.md)
+
 ## 本地、服务器，或者两边一起
 
 | 模式 | 工作区访问范围 | 适用场景 |

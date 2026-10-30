@@ -155,8 +155,9 @@ pub(crate) fn login_with_chatgpt_auth_tokens(
         None,
     );
     let accounts = storage.list_accounts().map_err(|err| err.to_string())?;
+    let issuer = std::env::var("CODEXMANAGER_ISSUER").unwrap_or_else(|_| DEFAULT_ISSUER.to_string());
     let account_id = pick_existing_account_id_by_identity(
-        accounts.iter(),
+        accounts.iter().filter(|account| account.issuer == issuer),
         chatgpt_account_id.as_deref(),
         workspace_id.as_deref(),
         fallback_subject_key.as_deref(),
@@ -167,6 +168,9 @@ pub(crate) fn login_with_chatgpt_auth_tokens(
     let existing_account = storage
         .find_account_by_id(&account_id)
         .map_err(|err| err.to_string())?;
+    let workspace_id = if workspace_id == chatgpt_account_id {
+        existing_account.as_ref().and_then(|account| account.workspace_id.clone()).or(workspace_id)
+    } else { workspace_id };
     let now = now_ts();
     let account = Account {
         id: account_id.clone(),
@@ -174,7 +178,7 @@ pub(crate) fn login_with_chatgpt_auth_tokens(
             .email
             .clone()
             .unwrap_or_else(|| resolved_scope_id.clone()),
-        issuer: std::env::var("CODEXMANAGER_ISSUER").unwrap_or_else(|_| DEFAULT_ISSUER.to_string()),
+        issuer,
         chatgpt_account_id: chatgpt_account_id.clone(),
         workspace_id: workspace_id.clone(),
         group_name: existing_account

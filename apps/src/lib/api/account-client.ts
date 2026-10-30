@@ -44,6 +44,7 @@ export const accountClient = {
         loginType: params.loginType || "chatgpt",
         openBrowser: params.openBrowser ?? false,
       }),
+      { timeoutMs: 90_000, retries: 0 },
     );
     return normalizeLoginStartResult(result);
   },
@@ -53,6 +54,7 @@ export const accountClient = {
     return {
       status: typeof source.status === "string" ? source.status : "",
       error: typeof source.error === "string" ? source.error : "",
+      accountId: typeof source.accountId === "string" ? source.accountId : null,
     };
   },
 };

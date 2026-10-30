@@ -211,6 +211,9 @@ pub(crate) fn login_status(login_id: &str) -> serde_json::Value {
     serde_json::json!({
         "status": session.status,
         "error": session.error,
+        "accountId": if session.status == "success" {
+            storage.login_completed_account_id(login_id).ok().flatten()
+        } else { None },
         "updatedAt": session.updated_at
     })
 }

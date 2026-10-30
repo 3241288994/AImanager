@@ -74,5 +74,9 @@ pub fn start_server(addr: &str) -> std::io::Result<()> {
     crate::sync_runtime_settings_from_storage();
     crate::usage_refresh::ensure_usage_polling();
     crate::usage_refresh::ensure_token_refresh_polling();
+    // Start independently of any page/API visit so durable switches resume even
+    // when the browser stays closed after a service restart.
+    #[cfg(not(test))]
+    crate::codex_account_switch::start_worker();
     crate::http::server::start_http(addr)
 }

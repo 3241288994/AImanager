@@ -6,6 +6,7 @@ export type CodexProfileMode =
   | "managed_unknown";
 
 export interface CodexProfileStatus {
+  accountSwitch?: CodexAccountSwitch | null;
   codexHome: string;
   authPath: string;
   configPath: string;
@@ -28,6 +29,39 @@ export interface CodexProfileStatus {
   error: string | null;
   warnings: string[];
   historyRepair: CodexProfileHistoryRepairSummary | null;
+}
+
+export interface CodexAccountSwitch {
+  syncDevices?: boolean;
+  requestId: string;
+  accountId: string;
+  previousAccountId: string | null;
+  codexHome: string;
+  state: "pending" | "completed" | "failed" | "attention";
+  reason: string;
+  requestedAt: number;
+  updatedAt: number;
+}
+
+export interface CodexDeviceTask {
+  requestId:string;
+  parentRequestId:string|null;
+  accountId:string;
+  kind:"switch"|"login";
+  state:"pending"|"needs_login"|"authorizing"|"completed"|"failed"|"attention"|"cancelled";
+  reason:string;
+  requestedAt:number;
+  updatedAt:number;
+  verificationUrl:string|null;
+  userCode:string|null;
+}
+export interface CodexDevice {
+  id:string;
+  label:string;
+  lastSeenAt:number;
+  currentAccountId:string|null;
+  knownAccountIds:string[];
+  task:CodexDeviceTask|null;
 }
 
 export interface CodexProfileHistoryRetention {

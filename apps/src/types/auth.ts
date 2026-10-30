@@ -1,6 +1,7 @@
 export interface LoginStatusResult {
   status: string;
   error: string;
+  accountId?: string | null;
 }
 
 export interface DeviceAuthInfo {

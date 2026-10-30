@@ -30,6 +30,9 @@ pub mod portable {
 /// 返回函数执行结果
 pub fn initialize_storage_if_needed() -> Result<(), String> {
     crate::storage_helpers::initialize_storage()?;
+    if let Some(storage) = crate::storage_helpers::open_storage() {
+        crate::account::reconciliation::reconcile(&storage)?;
+    }
     let _ = crate::auth::bootstrap_web_access_password_from_env()?;
     Ok(())
 }

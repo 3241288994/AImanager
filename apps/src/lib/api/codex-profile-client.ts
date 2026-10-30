@@ -75,7 +75,15 @@ export const CODEX_PROFILE_CANDIDATES_QUERY_KEY = [
 
 export function normalizeCodexProfileStatus(payload: unknown): CodexProfileStatus {
   const source = asObject(payload);
+  const pending = asObject(source.accountSwitch ?? source.account_switch);
   return {
+    accountSwitch: ["pending", "completed", "failed", "attention"].includes(asString(pending.state)) ? {
+      syncDevices: asBoolean(pending.syncDevices),
+      requestId: asString(pending.requestId), accountId: asString(pending.accountId),
+      previousAccountId: toNullableString(pending.previousAccountId), codexHome: asString(pending.codexHome),
+      state: pending.state as "pending" | "completed" | "failed" | "attention", reason: asString(pending.reason),
+      requestedAt: asNumber(pending.requestedAt), updatedAt: asNumber(pending.updatedAt),
+    } : null,
     codexHome: asString(source.codexHome ?? source.codex_home),
     authPath: asString(source.authPath ?? source.auth_path),
     configPath: asString(source.configPath ?? source.config_path),
@@ -237,6 +245,9 @@ export function normalizeCodexProfilePruneHistoryBackupsResult(
 }
 
 export const codexProfileClient = {
+  async cancelSwitch(requestId: string): Promise<CodexProfileStatus> {
+    return normalizeCodexProfileStatus(await invoke<unknown>("service_codex_profile_cancel_switch", withAddr({requestId}), {timeoutMs: 15_000, retries: 0}));
+  },
   async get(codexHome?: string | null): Promise<CodexProfileStatus> {
     const result = await invoke<unknown>(
       "service_codex_profile_get",
@@ -261,13 +272,16 @@ export const codexProfileClient = {
   async applyDirectAccount(params: {
     accountId: string;
     codexHome?: string | null;
+    syncDevices?: boolean;
   }): Promise<CodexProfileStatus> {
     const result = await invoke<unknown>(
       "service_codex_profile_apply_direct_account",
       withAddr({
         accountId: params.accountId,
         codexHome: params.codexHome || null,
+        syncDevices: params.syncDevices ?? true,
       }),
+      { timeoutMs: 90_000, retries: 0 },
     );
     return normalizeCodexProfileStatus(result);
   },

@@ -80,6 +80,7 @@ pub(crate) fn read_accounts() -> Result<AccountListResult, String> {
     let accounts = storage
         .list_accounts()
         .map_err(|err| format!("list accounts failed: {err}"))?;
+    let accounts = super::reconciliation::visible_accounts(&storage, accounts)?;
     let total = accounts.len() as i64;
     let items = to_account_summaries(&storage, accounts)?;
     let page_size = if total > 0 {
@@ -149,6 +150,8 @@ fn to_account_summary_with_reason(
         plan_type_raw,
         has_subscription,
         subscription_plan,
+        plan_monthly_usd: None,
+        plan_price_source: None,
         subscription_expires_at,
         subscription_renews_at,
         note,
@@ -349,7 +352,7 @@ where
     };
     let subscription_plan = subscription.and_then(|value| value.plan_type.clone());
     let plan_type = fallback_plan_type;
-    to_account_summary_with_reason(
+    let mut summary = to_account_summary_with_reason(
         AccountSummaryParts {
             id: account_id,
             label,
@@ -371,5 +374,8 @@ where
         model_slugs,
         quota_override.and_then(|value| value.primary_window_tokens),
         quota_override.and_then(|value| value.secondary_window_tokens),
-    )
+    );
+    summary.plan_monthly_usd = crate::codex_plan_tiers::monthly_usd(&summary.id,summary.plan_type.as_deref(),subscription);
+    summary.plan_price_source = summary.plan_monthly_usd.map(|_| "user_confirmed".to_owned());
+    summary
 }

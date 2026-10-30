@@ -71,10 +71,12 @@ impl Storage {
              )
              SELECT tokens.account_id, tokens.id_token, tokens.access_token, tokens.refresh_token, tokens.api_key_access_token, tokens.last_refresh
              FROM tokens
+             JOIN accounts ON accounts.id = tokens.account_id
              LEFT JOIN latest_status
                ON latest_status.account_id = tokens.account_id
               AND latest_status.rn = 1
              WHERE TRIM(COALESCE(refresh_token, '')) <> ''
+               AND LOWER(TRIM(accounts.status)) NOT IN ('disabled', 'banned')
                AND (
                     latest_status.message IS NULL
                     OR (

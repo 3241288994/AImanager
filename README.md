@@ -133,6 +133,11 @@ Missing metrics remain unknown. Codex exposes daily Credits, tokens, interaction
 **Reference amounts are not bills, and quotas from different platforms are not added together.**
 [Connections and quotas](docs/ai-connections.md) · [Analytics](docs/usage-analytics.md) · [Session recovery](docs/cli-sessions.md)
 
+Codex accounts can switch across the server and paired Macs with independent authorization.
+Idle sessions can stay open; active tasks defer switching, with checks every two seconds.
+Current Free entitlements take precedence over old billing labels; confirmed monthly Pro tiers can appear as `Pro 200$`.
+[Codex sign-in, device pairing, switching, and plan labels](docs/codex-account-activation.md)
+
 ## Local, server, or both
 
 | Mode | Read access | Typical use |

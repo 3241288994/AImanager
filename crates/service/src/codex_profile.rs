@@ -72,6 +72,7 @@ pub(crate) struct CodexProfileStatus {
     pub error: Option<String>,
     pub warnings: Vec<String>,
     pub history_repair: Option<CodexProfileHistoryRepairSummary>,
+    pub account_switch: Option<crate::codex_account_switch::SwitchStatus>,
 }
 
 #[derive(Debug, Clone)]
@@ -231,8 +232,10 @@ pub(crate) fn active_direct_account_id() -> Option<String> {
 }
 
 pub(crate) fn set_config(codex_home: Option<&str>) -> Result<CodexProfileStatus, String> {
+    let _guard = crate::codex_account_switch::LOCK.try_lock().map_err(|_| "account activation in progress")?;
     let profile_dir = resolve_profile_dir(codex_home)?;
     ensure_profile_dir_valid(&profile_dir)?;
+    crate::codex_account_switch::clear_locked()?;
     crate::app_settings::save_persisted_app_setting(
         APP_SETTING_CODEX_HOME_KEY,
         Some(&profile_dir.to_string_lossy()),
@@ -283,10 +286,41 @@ pub(crate) fn apply_direct_account(
     account_id: Option<&str>,
     codex_home: Option<&str>,
 ) -> Result<CodexProfileStatus, String> {
+    crate::codex_account_switch::request(account_id, codex_home)
+}
+
+pub(crate) fn validate_switch_target(account_id: &str) -> Result<(), String> {
+    let storage = open_storage()?;
+    let account = storage.find_account_by_id(account_id).map_err(|e| e.to_string())?.ok_or("account not found")?;
+    if account.status != "active" { return Err("account is not active; authorize it again before switching".into()); }
+    let token = storage.find_token_by_account_id(account_id).map_err(|e| e.to_string())?.ok_or("account token not found")?;
+    ensure_usable_token(&token)
+}
+
+pub(crate) fn direct_background_matches(account_id: &str, home: &Path) -> bool {
+    open_storage().ok().and_then(|s| s.find_token_by_account_id(account_id).ok().flatten())
+        .and_then(|t| codexmanager_core::auth::parse_id_token_claims(&t.id_token).ok())
+        .and_then(|c| c.email).is_some_and(|email| crate::codex_daemon_sync::identity_matches(home, &email))
+}
+
+// Caller holds the shared profile mutation lock and has checked daemon readiness.
+pub(crate) fn apply_direct_account_now(
+    account_id: Option<&str>,
+    codex_home: Option<&str>,
+) -> Result<CodexProfileStatus, String> {
     let account_id = normalize_required(account_id, "missing accountId")?;
     let profile_dir = resolve_profile_dir(codex_home)?;
     ensure_profile_dir_valid(&profile_dir)?;
     let _ = ensure_managed_profile_migrated(&profile_dir);
+
+    // Save the outgoing account's rotated credentials before replacing auth.json.
+    // This also covers selecting the same account again; never revive stale DB tokens.
+    let outgoing = status_for_profile(&profile_dir)?;
+    if matches!(outgoing.mode, CodexProfileMode::DirectAccount) {
+        if let Some(id) = outgoing.selected_account_id.as_deref() {
+            sync_profile_credentials_at(&profile_dir, id)?;
+        }
+    }
 
     let storage = open_storage()?;
     let account = storage
@@ -306,14 +340,22 @@ pub(crate) fn apply_direct_account(
     if issuer.is_empty() {
         return Err("account issuer is empty".to_string());
     }
-    crate::usage_token_refresh::refresh_and_persist_access_token(
+    if token_needs_refresh(&token, now_ts()) {
+      crate::usage_token_refresh::refresh_and_persist_access_token(
         &storage,
         &mut token,
         issuer,
         DEFAULT_CLIENT_ID,
         crate::usage_token_refresh::token_refresh_ahead_secs(),
-    )?;
+      )?;
+    }
     ensure_usable_token(&token)?;
+
+    match crate::codex_daemon_sync::before_profile_write(&profile_dir) {
+        crate::codex_daemon_sync::Readiness::Ready => {},
+        crate::codex_daemon_sync::Readiness::Busy => return Err("codex_background_busy".into()),
+        crate::codex_daemon_sync::Readiness::Unknown => return Err("codex_background_unreachable".into()),
+    }
 
     let previous_auth = read_optional(&profile_dir.join(AUTH_FILE))?;
     let previous_config = read_optional(&profile_dir.join(CONFIG_FILE))?;
@@ -359,7 +401,7 @@ pub(crate) fn apply_direct_account(
     // credential switching independent from history maintenance: scanning a
     // large Codex session archive here made a simple account switch read (and
     // occasionally rewrite) many gigabytes of unrelated conversation data.
-    let status = status_for_profile(&profile_dir)?;
+    let mut status = status_for_profile(&profile_dir)?;
     if !status.identity_consistent {
         let rollback_error = restore_switch_snapshot(
             &profile_dir,
@@ -376,6 +418,11 @@ pub(crate) fn apply_direct_account(
             ),
             None => "account switch verification failed and was rolled back".to_string(),
         });
+    }
+    let expected_email = codexmanager_core::auth::parse_id_token_claims(&token.id_token)
+        .ok().and_then(|claims| claims.email);
+    if let Some(warning) = crate::codex_daemon_sync::after_profile_write(&profile_dir, expected_email.as_deref()) {
+        status.warnings.push(warning);
     }
     Ok(status)
 }
@@ -417,6 +464,7 @@ pub(crate) fn apply_gateway(
     codex_home: Option<&str>,
     base_url: Option<&str>,
 ) -> Result<CodexProfileStatus, String> {
+    let _guard = crate::codex_account_switch::LOCK.try_lock().map_err(|_| "account activation in progress")?;
     let api_key_id = normalize_required(api_key_id, "missing apiKeyId")?;
     let profile_dir = resolve_profile_dir(codex_home)?;
     ensure_profile_dir_valid(&profile_dir)?;
@@ -438,6 +486,8 @@ pub(crate) fn apply_gateway(
     if secret.trim().is_empty() {
         return Err("api key secret is empty".to_string());
     }
+
+    crate::codex_account_switch::clear_locked()?;
 
     ensure_backup(&profile_dir)?;
     let auth_json = build_gateway_auth_json(&secret)?;
@@ -464,12 +514,14 @@ pub(crate) fn apply_gateway(
 }
 
 pub(crate) fn restore(codex_home: Option<&str>) -> Result<CodexProfileStatus, String> {
+    let _guard = crate::codex_account_switch::LOCK.try_lock().map_err(|_| "account activation in progress")?;
     let profile_dir = resolve_profile_dir(codex_home)?;
     let key = profile_key(&profile_dir);
     let mut backups = load_backups();
     let backup = backups
         .remove(&key)
         .ok_or_else(|| "backup not found for this Codex profile".to_string())?;
+    crate::codex_account_switch::clear_locked()?;
 
     fs::create_dir_all(&profile_dir).map_err(|err| {
         format!(
@@ -788,6 +840,7 @@ fn status_for_profile(profile_dir: &Path) -> Result<CodexProfileStatus, String> 
         error: None,
         warnings,
         history_repair: None,
+        account_switch: crate::codex_account_switch::status(profile_dir),
     })
 }
 
@@ -811,7 +864,13 @@ pub(crate) fn sync_active_profile_credentials_for_account(
     account_id: &str,
 ) -> Result<Option<ProfileCredentialSync>, String> {
     let profile_dir = resolve_profile_dir(None)?;
-    let status = status_for_profile(&profile_dir)?;
+    sync_profile_credentials_at(&profile_dir, account_id)
+}
+
+fn sync_profile_credentials_at(profile_dir: &Path, account_id: &str) -> Result<Option<ProfileCredentialSync>, String> {
+    let token_lock = crate::usage_token_refresh::token_refresh_lock_for_account(account_id);
+    let _token_guard = token_lock.lock().map_err(|_| "credential synchronization lock unavailable")?;
+    let status = status_for_profile(profile_dir)?;
     if !matches!(status.mode, CodexProfileMode::DirectAccount)
         || status.selected_account_id.as_deref() != Some(account_id)
     {
@@ -854,6 +913,7 @@ pub(crate) fn sync_active_profile_credentials_for_account(
     let access_token = token_field(tokens, "access_token")
         .ok_or_else(|| "current Codex auth has no access_token".to_string())?;
     let id_token = token_field(tokens, "id_token").unwrap_or_else(|| existing.id_token.clone());
+    ensure_same_token_subject(&existing.id_token, &id_token)?;
     let refresh_token =
         token_field(tokens, "refresh_token").unwrap_or_else(|| existing.refresh_token.clone());
     let profile_refreshed_at = value
@@ -918,6 +978,18 @@ fn token_credentials_differ(left: &Token, right: &Token) -> bool {
         || left.id_token != right.id_token
 }
 
+fn token_needs_refresh(token: &Token, now: i64) -> bool {
+    extract_token_exp(&token.access_token).is_none_or(|exp| exp <= now.saturating_add(120))
+}
+
+fn ensure_same_token_subject(stored: &str, candidate: &str) -> Result<(), String> {
+    use codexmanager_core::auth::parse_id_token_claims;
+    let old = parse_id_token_claims(stored).map_err(|_| "stored account identity could not be verified")?;
+    let new = parse_id_token_claims(candidate).map_err(|_| "Codex profile identity could not be verified")?;
+    if old.sub.trim().is_empty() || old.sub != new.sub { return Err("Codex profile token belongs to a different user".into()); }
+    Ok(())
+}
+
 fn profile_token_is_at_least_as_fresh(profile: &Token, stored: &Token) -> bool {
     match (
         extract_token_exp(&profile.access_token),
@@ -936,7 +1008,9 @@ fn profile_token_is_at_least_as_fresh(profile: &Token, stored: &Token) -> bool {
 }
 
 fn account_ids_match(managed_id: &str, actual_id: &str) -> bool {
-    managed_id == actual_id || managed_id.contains(&format!("cgpt={actual_id}"))
+    managed_id == actual_id || managed_id.split_once("::").is_some_and(|(_, scope)| {
+        scope.split('|').any(|part| part.strip_prefix("cgpt=") == Some(actual_id))
+    })
 }
 
 fn status_for_profile_with_history_repair(
@@ -1949,6 +2023,7 @@ fn build_direct_auth_json(account: &Account, token: &Token) -> Result<String, St
         .filter(|value| !value.is_empty())
         .unwrap_or(account.id.as_str());
     serde_json::to_string_pretty(&serde_json::json!({
+        "auth_mode": "chatgpt",
         "OPENAI_API_KEY": null,
         "tokens": {
             "id_token": token.id_token,
@@ -1973,6 +2048,9 @@ fn build_gateway_auth_json(api_key: &str) -> Result<String, String> {
 
 fn patch_config_for_direct(content: Option<String>) -> Result<String, String> {
     let mut doc = parse_config(content.as_deref().unwrap_or(""))?;
+    // We write auth.json, not an OS keyring entry. Make the consumer use the
+    // same credential store; the original setting is retained in the backup.
+    doc.as_table_mut().insert("cli_auth_credentials_store", toml_value("file"));
     if doc
         .get("model_provider")
         .and_then(Item::as_str)
@@ -2220,6 +2298,21 @@ mod tests {
         assert!(profile_token_is_at_least_as_fresh(&newer_profile, &stored));
     }
 
+    #[test]
+    fn switching_does_not_rotate_a_healthy_access_token() {
+        assert!(!token_needs_refresh(&test_token(jwt_with_exp(1000), 1), 100));
+        assert!(token_needs_refresh(&test_token(jwt_with_exp(220), 1), 100));
+        assert!(token_needs_refresh(&test_token("unknown".into(), 1), 100));
+    }
+
+    #[test]
+    fn outgoing_credentials_cannot_cross_user_subjects() {
+        let token = |sub: &str| format!("e30.{}.signature", base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(serde_json::json!({"sub": sub}).to_string()));
+        assert!(ensure_same_token_subject(&token("a"), &token("a")).is_ok());
+        assert!(ensure_same_token_subject(&token("a"), &token("b")).is_err());
+        assert!(ensure_same_token_subject(&token("a"), "bad").is_err());
+    }
+
     fn temp_profile(name: &str) -> PathBuf {
         let unique = SystemTime::now()
             .duration_since(UNIX_EPOCH)
@@ -2283,6 +2376,7 @@ mod tests {
         let input = r#"
 model_provider = "cm"
 model = "gpt-5.4"
+cli_auth_credentials_store = "keyring"
 
 [model_providers.cm]
 name = "CodexManager"
@@ -2300,6 +2394,14 @@ base_url = "https://example.test/v1"
         assert!(!output.contains("[model_providers.cm]"));
         assert!(output.contains("[model_providers.other]"));
         assert!(output.contains("model = \"gpt-5.4\""));
+        assert!(output.contains("cli_auth_credentials_store = \"file\""));
+    }
+
+    #[test]
+    fn identity_verification_requires_complete_account_id() {
+        assert!(account_ids_match("sub::cgpt=acct|ws=org", "acct"));
+        assert!(!account_ids_match("sub::cgpt=acct-extra|ws=org", "acct"));
+        assert!(!account_ids_match("tag-cgpt=acct", "acct"));
     }
 
     #[test]
@@ -2367,6 +2469,7 @@ name = "Other"
         let gateway = build_gateway_auth_json("cm-key").expect("gateway auth");
 
         assert!(auth_json_has_tokens(&direct));
+        assert_eq!(serde_json::from_str::<serde_json::Value>(&direct).unwrap()["auth_mode"], "chatgpt");
         assert!(!auth_json_is_gateway(&direct));
         assert!(auth_json_is_gateway(&gateway));
     }

@@ -313,6 +313,7 @@ async function mockConsoleApi(
         actualAccountId: "account-1",
         identityConsistent: true,
       },
+      "codexDevices/status": [],
       "sessionCatalog/list": {
         codexHome: "/tmp/codex",
         total: 1,
@@ -361,6 +362,212 @@ async function mockConsoleApi(
   });
   return methods;
 }
+
+for (const outcome of ["ready", "busy", "failed"] as const) {
+  test(`Codex login activates the exact account and reports ${outcome} separately`, async ({ page }) => {
+    await mockConsoleApi(page);
+    let applied = "";
+    await page.route("**/api/rpc", async route => {
+      const body = JSON.parse(route.request().postData() || "{}");
+      let result: unknown;
+      if (body.method === "account/login/start") {
+        expect(body.params.type).toBe("chatgptDeviceCode");
+        result = { type: "chatgptDeviceCode", loginId: "login-specific", verificationUrl: "https://auth.openai.com/codex/device", userCode: "TEST-ONLY" };
+      }
+      else if (body.method === "account/login/status") result = { status: "success", accountId: "account-2" };
+      else if (body.method === "codexProfile/applyDirectAccount") {
+        applied = body.params?.accountId;
+        if (outcome === "failed") {
+          await route.fulfill({ contentType: "application/json", body: JSON.stringify({ jsonrpc: "2.0", id: body.id, error: { code: -32000, message: "Profile is read-only" } }) });
+          return;
+        }
+        result = { codexHome: "/tmp/codex", selectedAccountId: "account-2", identityConsistent: true, warnings: outcome === "busy" ? ["Background server still has loaded sessions"] : [] };
+      } else { await route.fallback(); return; }
+      await route.fulfill({ contentType: "application/json", body: JSON.stringify({ jsonrpc: "2.0", id: body.id, result }) });
+    });
+    await page.goto("/connections/");
+    await page.getByRole("button", { name: "添加 Codex 账号", exact: true }).click();
+    await page.getByRole("checkbox", { name: "授权后同时切换到此账号", exact: true }).check();
+    await page.getByRole("button", { name: "授权并设为默认", exact: true }).click();
+    await expect.poll(() => applied).toBe("account-2");
+    const dialog = page.getByRole("dialog");
+    if (outcome === "ready") await expect(dialog).toHaveCount(0);
+    else {
+      await expect(dialog).toBeVisible();
+      await expect(dialog).toContainText(outcome === "busy" ? "loaded sessions" : "CLI 尚未生效");
+    }
+  });
+}
+
+test("adding a Codex account does not switch it unless explicitly selected", async ({page}) => {
+  await mockConsoleApi(page);
+  let applied = 0;
+  await page.route("**/api/rpc", async route => {
+    const body = route.request().postDataJSON();
+    let result;
+    if (body.method === "account/login/start") {
+      expect(body.params.type).toBe("chatgptDeviceCode");
+      result = {type:"chatgptDeviceCode", loginId:"new-login", verificationUrl:"https://auth.openai.com/codex/device", userCode:"TEST-ONLY"};
+    }
+    else if (body.method === "account/login/status") result = {status:"success", accountId:"account-2"};
+    else if (body.method === "codexProfile/applyDirectAccount") { applied++; result = {}; }
+    else { await route.fallback(); return; }
+    await route.fulfill({contentType:"application/json", body:JSON.stringify({jsonrpc:"2.0",id:body.id,result})});
+  });
+  await page.goto("/connections/");
+  await page.getByRole("button",{name:"添加 Codex 账号",exact:true}).click();
+  await expect(page.getByRole("checkbox",{name:"授权后同时切换到此账号"})).not.toBeChecked();
+  await page.getByRole("button",{name:"开始授权",exact:true}).click();
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+  expect(applied).toBe(0);
+});
+
+test("Codex device login shows its code without a localhost callback and allows explicit browser fallback", async ({page}) => {
+  await mockConsoleApi(page);
+  const started: string[] = [];
+  await page.route("**/api/rpc", async route => {
+    const body = route.request().postDataJSON();
+    let result;
+    if (body.method === "account/login/start") {
+      started.push(body.params.type);
+      result = body.params.type === "chatgptDeviceCode"
+        ? {type:"chatgptDeviceCode", loginId:"device-fixture", verificationUrl:"https://auth.openai.com/codex/device", userCode:"DEMO-ONLY"}
+        : {type:"chatgpt", loginId:"browser-fixture", authUrl:"https://auth.openai.com/oauth/authorize?test=fixture"};
+    } else if (body.method === "account/login/status") result = {status:"pending"};
+    else { await route.fallback(); return; }
+    await route.fulfill({contentType:"application/json",body:JSON.stringify({jsonrpc:"2.0",id:body.id,result})});
+  });
+  await page.goto("/connections/");
+  await page.getByRole("button",{name:"添加 Codex 账号",exact:true}).click();
+  await expect(page.getByLabel("授权方式",{exact:true})).toHaveValue("device");
+  await page.getByRole("button",{name:"开始授权",exact:true}).click();
+  await expect(page.getByRole("dialog")).toContainText("DEMO-ONLY");
+  await expect(page.getByLabel("授权方式",{exact:true})).toBeDisabled();
+  await page.keyboard.press("Escape");
+  await page.getByRole("button",{name:"添加 Codex 账号",exact:true}).click();
+  await page.getByLabel("授权方式",{exact:true}).selectOption("browser");
+  await expect(page.getByRole("dialog")).toContainText("请先配置独立回调通道");
+  await page.getByRole("button",{name:"开始授权",exact:true}).click();
+  await expect(page.getByRole("button",{name:"打开 OpenAI 授权页面",exact:true})).toBeVisible();
+  await expect(page.getByRole("dialog")).not.toContainText("DEMO-ONLY");
+  expect(started).toEqual(["chatgptDeviceCode", "chatgpt"]);
+});
+
+test("Codex verification errors do not expose HTML or silently fall back to a conflicting callback", async ({page}) => {
+  await mockConsoleApi(page);
+  let started = 0;
+  let applied = 0;
+  await page.route("**/api/rpc", async route => {
+    const body = route.request().postDataJSON();
+    if (body.method === "codexProfile/applyDirectAccount") applied++;
+    if (body.method !== "account/login/start") { await route.fallback(); return; }
+    expect(body.params.type).toBe("chatgptDeviceCode"); started++;
+    await route.fulfill({contentType:"application/json",body:JSON.stringify({jsonrpc:"2.0",id:body.id,result:{error:"device_authorization_verification: Cloudflare <!DOCTYPE html><script>private-error</script>"}})});
+  });
+  await page.goto("/connections/");
+  await page.getByRole("button",{name:"添加 Codex 账号",exact:true}).click();
+  await page.getByRole("button",{name:"开始授权",exact:true}).click();
+  await expect(page.getByRole("dialog").getByRole("alert")).toContainText("不代表账号被封禁");
+  await expect(page.getByRole("dialog")).not.toContainText("private-error");
+  await expect(page.getByRole("button",{name:"打开 OpenAI 授权页面",exact:true})).toHaveCount(0);
+  expect(started).toBe(1); expect(applied).toBe(0);
+});
+
+test("quota page queues and cancels a switch without relabeling the current account", async ({page}) => {
+  await mockConsoleApi(page);
+  let pending: unknown = null;
+  let cancelled = false;
+  await page.route("**/api/rpc", async route => {
+    const body = route.request().postDataJSON();
+    if (body.method === "codexProfile/applyDirectAccount") {
+      expect(body.params.accountId).toBe("account-2");
+      pending = {requestId:"switch-b",accountId:"account-2",previousAccountId:"account-1",state:"pending",reason:"sessions_loaded",codexHome:"/tmp/codex"};
+    } else if (body.method === "codexProfile/cancelSwitch") {
+      expect(body.params.requestId).toBe("switch-b"); pending = null; cancelled = true;
+    } else if (body.method !== "codexProfile/get") { await route.fallback(); return; }
+    await route.fulfill({contentType:"application/json",body:JSON.stringify({jsonrpc:"2.0",id:body.id,result:{mode:"direct_account",codexHome:"/tmp/codex",identityConsistent:true,selectedAccountId:"account-1",actualAccountId:"account-1",accountSwitch:pending,warnings:[]}})});
+  });
+  await page.goto("/");
+  await page.getByRole("button",{name:"切换到此账号",exact:true}).click();
+  await expect(page.getByTestId("codex-switch-status")).toContainText("空闲会话无需退出");
+  await expect(page.getByTestId("codex-quota-card").filter({hasText:"Backup account"})).toHaveAttribute("data-active-account","false");
+  await page.getByRole("button",{name:"取消待切换",exact:true}).click();
+  await expect(page.getByTestId("codex-switch-status")).toHaveCount(0);
+  expect(cancelled).toBe(true);
+});
+
+test("dual host switch reports a Mac authorization requirement without claiming completion", async ({page}) => {
+  await mockConsoleApi(page);
+  let requested=false;
+  let authorizing=false;
+  await page.route("**/api/rpc",async route=>{
+    const body=route.request().postDataJSON();
+    let result:unknown;
+    const device={id:"fixture-mac-device",label:"Mac",lastSeenAt:Math.floor(Date.now()/1000),currentAccountId:"account-1",knownAccountIds:["account-1"],task:requested ? {requestId:"mac-switch",parentRequestId:"root-switch",accountId:"account-2",kind:authorizing?"login":"switch",state:authorizing?"authorizing":"needs_login",reason:"needs_login",userCode:authorizing?"TEST-ONLY":null,verificationUrl:authorizing?"https://auth.openai.com/codex/device":null} : null};
+    if(body.method==="codexDevices/status") result=[device];
+    else if(body.method==="codexDevices/login") {authorizing=true;result=[device];}
+    else if(body.method==="codexProfile/applyDirectAccount") {expect(body.params.syncDevices).toBe(true);requested=true;}
+    else if(body.method!=="codexProfile/get") {await route.fallback();return;}
+    if(result===undefined) result={mode:"direct_account",codexHome:"/tmp/codex",identityConsistent:true,selectedAccountId:requested?"account-2":"account-1",actualAccountId:requested?"account-2":"account-1",warnings:[],accountSwitch:requested?{syncDevices:true,requestId:"root-switch",accountId:"account-2",state:"completed",reason:"applied"}:null};
+    await route.fulfill({contentType:"application/json",body:JSON.stringify({jsonrpc:"2.0",id:body.id,result})});
+  });
+  await page.goto("/");
+  await page.getByTestId("codex-quota-card").filter({hasText:"Backup account"}).getByRole("button",{name:"切换到此账号",exact:true}).click();
+  await expect(page.getByTestId("codex-device-status")).toContainText("需要独立授权一次");
+  await expect(page.getByTestId("codex-switch-status")).toContainText("完成前不会显示全部成功");
+  await expect(page.getByText("双端默认",{exact:true})).toHaveCount(0);
+  await page.getByRole("button",{name:"授权 Mac 后继续同步",exact:true}).click();
+  await expect(page.getByTestId("codex-device-status")).toContainText("TEST-ONLY");
+  await expect(page.getByRole("button",{name:"打开官方设备码页面",exact:true})).toBeVisible();
+  await page.setViewportSize({width:390,height:844});
+  await expect(page.getByTestId("codex-device-status")).toContainText("TEST-ONLY");
+  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth+1)).toBe(true);
+});
+
+test("Free account uses an explicit understated label rather than a billing conflict warning", async ({page}) => {
+  await mockConsoleApi(page);
+  await page.route("**/api/rpc",async route=>{
+    const body=route.request().postDataJSON();
+    if(body.method!=="account/list") {await route.fallback();return;}
+    await route.fulfill({contentType:"application/json",body:JSON.stringify({jsonrpc:"2.0",id:body.id,result:{total:1,items:[{id:"account-1",label:"Free fixture",status:"active",hasToken:true,planType:"free",subscriptionPlan:"pro",hasSubscription:false}]}})});
+  });
+  await page.goto("/");
+  const card=page.getByTestId("codex-quota-card");
+  await expect(card.getByText("FREE",{exact:true})).toBeVisible();
+  await expect(card).toContainText("免费版 · 无付费权益");
+  await expect(card).not.toContainText("套餐来源冲突");
+  await expect(card).not.toContainText("待确认");
+});
+
+test("confirmed Pro tiers show their dollar amount without assigning a price to generic Pro",async ({page})=>{
+  await mockConsoleApi(page);
+  await page.route("**/api/rpc",async route=>{
+    const body=route.request().postDataJSON();
+    if(body.method!=="account/list") {await route.fallback();return;}
+    const items=[{id:"account-1",label:"Confirmed Pro",status:"active",hasToken:true,planType:"pro",hasSubscription:true,planMonthlyUsd:200,planPriceSource:"user_confirmed"},{id:"account-2",label:"Unknown Pro tier",status:"active",hasToken:true,planType:"pro",hasSubscription:true}];
+    await route.fulfill({contentType:"application/json",body:JSON.stringify({jsonrpc:"2.0",id:body.id,result:{total:2,items}})});
+  });
+  await page.goto("/");
+  await expect(page.getByTestId("codex-quota-card").filter({hasText:"Confirmed Pro"}).getByText("Pro 200$",{exact:true})).toBeVisible();
+  await expect(page.getByTestId("codex-quota-card").filter({hasText:"Unknown Pro tier"}).getByText("PRO",{exact:true})).toBeVisible();
+});
+
+test("a failed cached Mac grant has an explicit reauthorization path without switching the default",async ({page})=>{
+  await mockConsoleApi(page);
+  let requested=false;
+  await page.route("**/api/rpc",async route=>{
+    const body=route.request().postDataJSON();
+    if(body.method!=="codexDevices/status" && body.method!=="codexDevices/login") {await route.fallback();return;}
+    if(body.method==="codexDevices/login") {expect(body.params.accountId).toBe("account-2");requested=true;}
+    const result=[{id:"fixture-mac-device",label:"Mac",lastSeenAt:Math.floor(Date.now()/1000),currentAccountId:"account-1",knownAccountIds:["account-1","account-2"],task:{requestId:"mac-failed",accountId:"account-2",kind:"switch",state:requested?"authorizing":"failed",reason:"login_failed"}}];
+    await route.fulfill({contentType:"application/json",body:JSON.stringify({jsonrpc:"2.0",id:body.id,result})});
+  });
+  await page.goto("/");
+  await page.getByRole("button",{name:"重新授权此 Mac",exact:true}).click();
+  await expect(page.getByTestId("codex-device-status")).toContainText("官方页面");
+  await expect(page.getByTestId("codex-quota-card").filter({hasText:"Research account"})).toHaveAttribute("data-active-account","true");
+  expect(requested).toBe(true);
+});
 
 test("managed CLI accounts complete browser handoff, selection and official quota refresh", async ({ page }) => {
   await mockConsoleApi(page);
@@ -605,14 +812,14 @@ test("the connection center runs one-click recovery and reports an exact safe fa
   await expect(page.getByRole("button", { name: "再次修复" })).toBeVisible();
 });
 
-test("AI connections owns identity changes; usage stays focused on quotas without model catalogs", async ({ page }) => {
+test("AI connections owns authorization; usage offers quick switching without model catalogs", async ({ page }) => {
   const methods = await mockConsoleApi(page);
   const errors: string[] = [];
   page.on("pageerror", error => errors.push(error.message));
   await page.goto("/");
   await expect(page.getByTitle("Research account")).toBeVisible();
   await expect(page.getByRole("button", { name: "添加 Codex 账号" })).toHaveCount(0);
-  await expect(page.getByRole("button", { name: "切换到此账号" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "切换到此账号" })).toHaveCount(1);
   await page.getByRole("tab", { name: /Claude Code/ }).click();
   await expect(page.getByText("剩余 82%", { exact: true }).first()).toBeVisible();
   await expect(page.getByText("Example model", { exact: true })).toHaveCount(0);

@@ -1,5 +1,19 @@
 use crate::commands::shared::rpc_call_in_background;
 
+#[tauri::command]
+pub async fn service_codex_devices_status(addr: Option<String>) -> Result<serde_json::Value,String> {
+    rpc_call_in_background("codexDevices/status",addr,None).await
+}
+#[tauri::command]
+pub async fn service_codex_devices_login(addr: Option<String>,device_id:String,account_id:String) -> Result<serde_json::Value,String> {
+    rpc_call_in_background("codexDevices/login",addr,Some(serde_json::json!({"deviceId":device_id,"accountId":account_id}))).await
+}
+
+#[tauri::command]
+pub async fn service_codex_profile_cancel_switch(addr: Option<String>, request_id: String) -> Result<serde_json::Value, String> {
+    rpc_call_in_background("codexProfile/cancelSwitch", addr, Some(serde_json::json!({"requestId": request_id}))).await
+}
+
 /// 函数 `service_codex_profile_get`
 ///
 /// 作者: gaohongshun
@@ -78,10 +92,12 @@ pub async fn service_codex_profile_apply_direct_account(
     addr: Option<String>,
     account_id: String,
     codex_home: Option<String>,
+    sync_devices: Option<bool>,
 ) -> Result<serde_json::Value, String> {
     let params = serde_json::json!({
         "accountId": account_id,
         "codexHome": codex_home,
+        "syncDevices": sync_devices.unwrap_or(false),
     });
     rpc_call_in_background("codexProfile/applyDirectAccount", addr, Some(params)).await
 }

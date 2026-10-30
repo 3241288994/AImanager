@@ -1,9 +1,18 @@
-use rusqlite::{params_from_iter, types::Value, Result};
+use rusqlite::{params_from_iter, types::Value, OptionalExtension, Result};
 use std::collections::HashMap;
 
 use super::{Event, Storage};
 
 impl Storage {
+    /// Resolve the account produced by this specific login, never a global
+    /// "current account" that another concurrent browser login may have changed.
+    pub fn login_completed_account_id(&self, login_id: &str) -> Result<Option<String>> {
+        self.conn.query_row(
+            "SELECT account_id FROM events WHERE type = 'oauth_login_completed' AND message = ?1 ORDER BY id DESC LIMIT 1",
+            [login_id], |row| row.get(0),
+        ).optional()
+    }
+
     /// 函数 `insert_event`
     ///
     /// 作者: gaohongshun
@@ -99,6 +108,20 @@ impl Storage {
             }
         }
         Ok(out)
+    }
+}
+
+#[cfg(test)]
+mod login_tests {
+    use super::*;
+    #[test]
+    fn completed_login_is_scoped_to_its_session() {
+        let storage = Storage::open_in_memory().unwrap(); storage.init().unwrap();
+        for (login, account) in [("login-a", "account-a"), ("login-b", "account-b")] {
+            storage.insert_event(&Event { account_id: Some(account.into()), event_type: "oauth_login_completed".into(), message: login.into(), created_at: 1 }).unwrap();
+        }
+        assert_eq!(storage.login_completed_account_id("login-a").unwrap().as_deref(), Some("account-a"));
+        assert_eq!(storage.login_completed_account_id("unknown").unwrap(), None);
     }
 }
 

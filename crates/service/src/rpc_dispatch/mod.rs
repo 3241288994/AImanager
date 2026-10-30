@@ -229,6 +229,9 @@ mod ai_connection_access_tests {
     #[test]
     fn ai_connections_remain_administrator_only() {
         for method in [
+            "codexDevices/heartbeat",
+            "codexDevices/status",
+            "codexDevices/login",
             "aiAccounts/action",
             "aiConnections/list",
             "aiConnections/save",

@@ -4,7 +4,7 @@ use codexmanager_core::auth::{
     parse_id_token_claims, token_exchange_body_authorization_code,
     token_exchange_body_token_exchange, IdTokenClaims, DEFAULT_CLIENT_ID, DEFAULT_ISSUER,
 };
-use codexmanager_core::storage::{now_ts, Account, Token};
+use codexmanager_core::storage::{now_ts, Account, Event, Token};
 use reqwest::header::HeaderMap;
 use reqwest::Client;
 use reqwest::Error as ReqwestError;
@@ -861,6 +861,18 @@ pub(crate) struct DeviceCodeStartResult {
     pub(crate) interval: u64,
 }
 
+// 403/404 JSON responses are part of the device polling protocol. HTML or an
+// explicit challenge header is not a pending approval; do not retry it for 15 min.
+fn device_verification_page(headers: &HeaderMap) -> bool {
+    headers.get("cf-mitigated").and_then(|v| v.to_str().ok())
+        .is_some_and(|v| v.eq_ignore_ascii_case("challenge"))
+        || headers.get(reqwest::header::CONTENT_TYPE).and_then(|v| v.to_str().ok())
+            .is_some_and(|v| v.to_ascii_lowercase().contains("text/html"))
+}
+
+const DEVICE_VERIFICATION_REQUIRED: &str =
+    "device_authorization_verification: authentication returned an HTML or Cloudflare verification page; authorization has not completed";
+
 #[derive(serde::Deserialize)]
 struct DeviceAuthTokenResponse {
     authorization_code: String,
@@ -914,6 +926,9 @@ async fn request_device_code_async(
         .map_err(|err| err.to_string())?;
 
     if !resp.status().is_success() {
+        if device_verification_page(resp.headers()) {
+            return Err(DEVICE_VERIFICATION_REQUIRED.to_string());
+        }
         if resp.status() == StatusCode::NOT_FOUND {
             return Err(
                 "device code login is not enabled for this Codex server. Use the browser login or verify the server URL."
@@ -1016,12 +1031,15 @@ async fn poll_device_auth_token_async(
         }
 
         if matches!(resp.status(), StatusCode::FORBIDDEN | StatusCode::NOT_FOUND) {
+            if device_verification_page(resp.headers()) {
+                return Err(DEVICE_VERIFICATION_REQUIRED.to_string());
+            }
             let elapsed = started_at.elapsed();
             if elapsed >= max_wait {
                 return Err("device auth timed out after 15 minutes".to_string());
             }
             let remaining = max_wait.saturating_sub(elapsed);
-            let sleep_for = Duration::from_secs(interval).min(remaining);
+            let sleep_for = Duration::from_secs(interval.max(1)).min(remaining);
             tokio::time::sleep(sleep_for).await;
             continue;
         }
@@ -1180,7 +1198,7 @@ pub(crate) fn complete_login_with_redirect(
     );
     let accounts = storage.list_accounts().map_err(|e| e.to_string())?;
     let account_key = pick_existing_account_id_by_identity(
-        accounts.iter(),
+        accounts.iter().filter(|account| account.issuer == issuer),
         chatgpt_account_id.as_deref(),
         workspace_id.as_deref(),
         fallback_subject_key.as_deref(),
@@ -1191,6 +1209,10 @@ pub(crate) fn complete_login_with_redirect(
     let existing_account = storage
         .find_account_by_id(&account_key)
         .map_err(|e| e.to_string())?;
+    // Do not replace a resolved organization with the OAuth account-ID fallback.
+    let workspace_id = if workspace_id == chatgpt_account_id {
+        existing_account.as_ref().and_then(|account| account.workspace_id.clone()).or(workspace_id)
+    } else { workspace_id };
     let sort = existing_account
         .as_ref()
         .map(|account| account.sort)
@@ -1234,6 +1256,12 @@ pub(crate) fn complete_login_with_redirect(
         last_refresh: now,
     };
     storage.insert_token(&token).map_err(|e| e.to_string())?;
+
+    crate::account::reconciliation::reconcile(&storage)?;
+    storage.insert_event(&Event {
+        account_id: Some(account_key.clone()), event_type: "oauth_login_completed".into(),
+        message: state.to_string(), created_at: now,
+    }).map_err(|e| e.to_string())?;
 
     let db_path = std::env::var("CODEXMANAGER_DB_PATH").unwrap_or_else(|_| "<unset>".to_string());
     log::info!(
