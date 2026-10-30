@@ -64,7 +64,7 @@ jobs:
           tar -czf frontend-dist.tar.gz -C apps out
 
       - name: Upload frontend dist artifact
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: codexmanager-frontend-dist
           path: frontend-dist.tar.gz
@@ -153,7 +153,7 @@ jobs:
           shell-type: pwsh
 
       - name: Upload artifacts
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: codexmanager-windows
           path: ${{ env.CARGO_TARGET_DIR }}/release/release-assets/*.exe
@@ -161,7 +161,7 @@ jobs:
           compression-level: 0
 
       - name: Upload service artifacts
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: codexmanager-service-windows
           path: stage/*.zip
@@ -298,7 +298,7 @@ jobs:
           shell-type: bash
 
       - name: Upload artifacts
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: codexmanager-macos-${{ matrix.arch }}
           path: |
@@ -308,7 +308,7 @@ jobs:
           compression-level: 0
 
       - name: Upload service artifacts
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: codexmanager-service-macos-${{ matrix.arch }}
           path: stage/*.zip
@@ -422,7 +422,7 @@ jobs:
 
       - name: Upload docker artifacts
         if: ${{ matrix.build_docker }}
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: codexmanager-docker
           path: |
@@ -456,7 +456,7 @@ jobs:
           echo "web package: $web_zip"
 
       - name: Upload artifacts
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: codexmanager-linux-${{ matrix.arch }}
           path: |
@@ -467,7 +467,7 @@ jobs:
           compression-level: 0
 
       - name: Upload service artifacts
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: codexmanager-service-linux-${{ matrix.arch }}
           path: stage/*.zip
@@ -475,7 +475,7 @@ jobs:
           compression-level: 0
 
       - name: Upload web artifacts
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: codexmanager-web-linux-${{ matrix.arch }}
           path: ${{ env.CARGO_TARGET_DIR }}/${{ matrix.rust_target }}/release/release-assets/CodexManager-web-linux-${{ matrix.arch }}.zip
