@@ -488,7 +488,8 @@ test("quota page queues and cancels a switch without relabeling the current acco
     await route.fulfill({contentType:"application/json",body:JSON.stringify({jsonrpc:"2.0",id:body.id,result:{mode:"direct_account",codexHome:"/tmp/codex",identityConsistent:true,selectedAccountId:"account-1",actualAccountId:"account-1",accountSwitch:pending,warnings:[]}})});
   });
   await page.goto("/");
-  await page.getByRole("button",{name:"切换到此账号",exact:true}).click();
+  await expect(page.getByTestId("codex-quota-card").filter({hasText:"Research account"})).toHaveAttribute("data-active-account","true");
+  await page.getByTestId("codex-quota-card").filter({hasText:"Backup account"}).getByRole("button",{name:"切换到此账号",exact:true}).click();
   await expect(page.getByTestId("codex-switch-status")).toContainText("空闲会话无需退出");
   await expect(page.getByTestId("codex-quota-card").filter({hasText:"Backup account"})).toHaveAttribute("data-active-account","false");
   await page.getByRole("button",{name:"取消待切换",exact:true}).click();
