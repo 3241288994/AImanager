@@ -6,6 +6,7 @@ from pathlib import Path
 import re
 import shutil
 import subprocess
+import sys
 
 from .config import CollabError, read_json, provider_path, user_home
 
@@ -58,6 +59,12 @@ def codex_command(config, route, account_id, access, roots, session_id=None):
     fs = {":minimal": "read", ":workspace_roots": "write" if access == "exec" else "read",
           "/usr": "read", "/lib": "read", "/lib64": "read",
           str(Path(executable).parent.parent): "read"}
+    if sys.platform == "darwin":
+        # /usr/bin/python3 and other Apple tool shims resolve into the installed
+        # SDK. Without read access xcrun misleadingly reports it as missing.
+        for developer in ("/Library/Developer/CommandLineTools", "/Applications/Xcode.app/Contents/Developer"):
+            if Path(developer).is_dir():
+                fs[developer] = "read"
     profile = "{ " + ", ".join(json.dumps(k) + "=" + json.dumps(v) for k, v in fs.items()) + " }"
     command = [executable,
                "--no-daemon", "-a", "never", "exec", "--ignore-user-config", "--ignore-rules",

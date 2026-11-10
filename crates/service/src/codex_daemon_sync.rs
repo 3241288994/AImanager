@@ -64,7 +64,7 @@ pub(crate) fn after_profile_write(profile: &Path, expected_email: Option<&str>) 
     #[cfg(unix)]
     {
         let socket = profile.join("app-server-control/app-server-control.sock");
-        if std::fs::symlink_metadata(&socket).is_err() {
+        if std::fs::symlink_metadata(&socket).is_err_and(|e| e.kind() == std::io::ErrorKind::NotFound) {
             return None;
         }
         let profile = profile.to_path_buf();
@@ -137,25 +137,30 @@ fn synchronize(profile: &Path, expected_email: Option<&str>) -> Option<String> {
             }
         }
     }
-    match probe() {
-        Ok(state)
-            if state
-                .account
-                .get("type")
-                .and_then(serde_json::Value::as_str)
-                == Some("chatgpt")
-                && expected_email.is_some_and(|email| {
-                    state
-                        .account
-                        .get("email")
-                        .and_then(serde_json::Value::as_str)
-                        == Some(email)
-                }) =>
-        {
-            None
-        }
-        _ => Some(failure.into()),
+    // Lifecycle success means the process started, not that authentication is ready.
+    let deadline = Instant::now() + Duration::from_secs(5);
+    loop {
+        let verified = runtime.block_on(async {
+            tokio::time::timeout(deadline.saturating_duration_since(Instant::now()), probe_identity(profile)).await
+                .ok().and_then(Result::ok).is_some_and(|account| account_matches(&account, expected_email))
+        });
+        if verified { return None; }
+        if Instant::now() >= deadline { return Some(failure.into()); }
+        std::thread::sleep(Duration::from_millis(250));
     }
+}
+
+#[cfg(unix)]
+async fn probe_identity(profile: &Path) -> Result<serde_json::Value, ()> {
+    probe(profile, false).await.map(|snapshot| snapshot.account)
+}
+
+fn account_matches(account: &serde_json::Value, expected: Option<&str>) -> bool {
+    account.get("type").and_then(serde_json::Value::as_str) == Some("chatgpt")
+        && expected.filter(|email| !email.is_empty()).is_some_and(|email| {
+            account.get("email").and_then(serde_json::Value::as_str)
+                .is_some_and(|actual| actual.eq_ignore_ascii_case(email))
+        })
 }
 
 #[cfg(any(unix, test))]

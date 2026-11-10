@@ -6,7 +6,7 @@
 审阅和执行。命令仍为 `ai-collab`，skill 标识仍为 `multi-model-collaboration`。
 
 架构与取舍见 [方案](collaboration-runtime-design.md) 和 [接口设计](collaboration-interface-design.md)。
-本文描述 0.2.0 的实际接口；设计文档中的远期扩展不表示已经支持。
+本文描述 0.2.1 的实际接口；设计文档中的远期扩展不表示已经支持。
 
 ## 先看一次协作如何衔接
 
@@ -85,7 +85,10 @@ API 模型拿到相关材料后，可以提出方案、补充思路、审阅结�
 
 ## 安装和使用
 
-要求 Linux、Python 3.8+。执行层只使用标准库；进程身份核验依赖 `/proc`。
+要求 macOS 或 Linux、Python 3.8+。执行层只使用标准库；Linux 使用 `/proc`，
+macOS 使用系统 `libproc` 的进程启动时间核验身份，不能用仅有 PID 的存活检查替代。
+Codex 的 Mac 沙箱对已安装的 Command Line Tools / 标准 Xcode 开发工具目录给予
+只读访问，让系统 Python 等工具正常运行；不增加目录写权限或网络权限。
 
 ```bash
 python3 scripts/install-ai-collab.py
@@ -115,6 +118,10 @@ ai-collab reply JOB_ID --prompt "请根据上一轮材料进一步分析"
 安装器默认装到 `~/.local/bin` 与 `~/.codex/skills`；通过 `--skill-dir` 安装到
 其他 harness 的 skill 目录。同一份 skill 不依赖特定主控。未受管理的同名 skill
 不会被覆盖。新增 skill 通常需新开会话发现。
+Codex 也可使用 `~/.agents/skills`；Claude Code 使用 `~/.claude/skills`。
+托管 Claude 配置需将 skill 安装到对应 `CLAUDE_CONFIG_DIR/skills`，不能只复制到
+默认账号目录。macOS 的会员账号保留真实用户 HOME 以访问系统钥匙串，
+通过独立 `CLAUDE_CONFIG_DIR` 隔离设置、会话和登录；不复制或重置系统钥匙串。
 安装入口通过 `AI_COLLAB_HOME` 固定所属用户的配置根，避免 Claude 等隔离账号
 改变 `HOME` 后丢失模型映射；显式 `AI_COLLAB_CONFIG` / `AI_COLLAB_STATE_DIR` 仍优先。
 
@@ -128,7 +135,8 @@ ai-collab reply JOB_ID --prompt "请根据上一轮材料进一步分析"
 
 不指定工作区默认 text，指定工作区默认 read。`--access exec` 必须指定一个目录。
 Claude read 使用 2.1.304+ 的 Read/Glob/Grep、restricted 与 safe-mode。
-Claude exec 使用原生 Bash sandbox，需要 bubblewrap 与 socat，禁用无沙箱回退，
+Claude exec 使用原生 Bash sandbox；macOS 使用系统 Seatbelt，Linux 需要 bubblewrap
+与 socat，均禁用无沙箱回退，
 可以通过 `claude.sandboxPath` 增加已有依赖目录。原生 Bash 文件系统可见范围与
 文件工具不同，**不能把它理解为所有读取均严格限制到项目目录**；执行不可信仓库
 应另行使用容器/独立系统账号。工作区内容是实时读取，不是不可变快照。
@@ -148,6 +156,9 @@ Codex 读取 `codex.home`（默认 `~/.codex`）现有 ChatGPT 登录，执行�
 `codex.binary` 指定；不切换到 API key。Claude 复用 AImanager 管理的 OAuth。
 Gemini 凭据引用 `~/.config/gemini-web-client/client.env`；环境变量可指定初始
 端点，任务创建后端点固定。账号池仍可能选用不同上游账号，响应可用时记录实际账号。
+Mac 与服务器共用凭据来源但端口不同时，可在个人配置中设置
+`geminiWeb.baseUrl`（例如 `http://127.0.0.1:6969/v1`）覆盖来源文件中的端点，
+无需改写或复制密钥；任务快照仍固定提交时解析出的端点。
 模型 metadata 表示供应方声明；Codex 若未输出模型 metadata，则如实标注
 `explicit_request_only`，不冒充独立鉴定。
 

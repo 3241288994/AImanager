@@ -97,7 +97,23 @@ Provider、SSH、Router 和 Tunnel。可随时获取分层诊断：
 labcontext status
 labcontext doctor
 labcontext repair
+labcontext repair --verbose  # 需要时查看详细失败诊断与日志位置
 ```
+
+`repair` 默认只输出一行“连接成功”或“连接失败：具体原因”，完成后返回终端，服务继续在后台运行。
+只有 Provider 真实能力、已启用传输和配置的本机连接中心均验证通过才返回成功（退出码 0）；失败返回 2。
+详细启动输出写入仅当前用户可读的 `recovery.log`，不会在终端持续刷屏。
+macOS 上会核对同配置的 `com.codexmanager.labcontext` LaunchAgent，修复期间暂停其 KeepAlive，
+完成或失败后恢复后台任务，避免旧进程刚停止就被自动拉起并误判“已运行”。
+同一运行栈的修复互斥执行；未知进程及无法证明属于 LabContext 的远端 SSH 会话仍不会被清理。
+对于由 `labctx --config … serve` 启动的本地 Provider，还会先用它自己的 Python 环境验证配置；
+授权目录失效时直接指出目录，不会扩大授权范围或反复启动失败。
+
+为减少故障恢复等待，`repair` 会先快速排除已关闭的本机传输端口；旧链路的完整检查最多等待
+3 秒，再进入恢复。停止完成后，SSH 登录与反向转发合并验证，不再重复停止同一启动器或重复
+执行旧 Router 的完整诊断。重建时先等待监听端口，再执行有时间预算的真实能力验证；端口打开
+本身不算连接成功，完整检查超时也不会退回缓存的“ready”状态。每阶段耗时保存在修复日志和
+`recovery-status.json` 的 `timingsMs` 中，默认终端输出仍只有一行结果。
 
 `status` 不只检查端口，还会核对 Provider 身份与最低版本、执行 MCP 初始化、读取工具清单、调用一次
 `list_workspaces`，并检查管理接口、SSH 子进程和 Tunnel `/readyz`。启动器运行记录默认写入

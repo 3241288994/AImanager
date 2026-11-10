@@ -246,6 +246,10 @@ labcontext doctor
 labcontext repair
 ```
 
+`repair` runs recovery in the background and prints only the verified connection result or failure reason.
+Use `labcontext repair --verbose` for diagnostic details and the log location.
+Recovery bounds the old-stack check, combines SSH probes, and records stage timings without accepting a cached success after a timeout.
+
 Tunnel connection profiles are managed separately in the backend so later ChatGPT account changes can target the access layer without reinstalling workspaces. See [account-switch recovery](docs/chatgpt-account-switch.md); this does not add a frontend account-switch panel.
 
 - Expose only explicitly authorized directories; retain file-size, depth, and response budgets.

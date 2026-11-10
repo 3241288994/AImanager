@@ -94,7 +94,19 @@ class DeviceTests(unittest.TestCase):
         self.save_target()
         snapshots = [{'absent':False,'loaded':[],'active':False,'email':ONE['email']}]*3
         with patch.object(profile,'daemon_snapshot',side_effect=snapshots), patch.object(profile.subprocess,'run',side_effect=OSError('fixture')):
-            self.assertEqual(self.native.apply(TASK,TWO,[ONE,TWO]),('attention','background_unverified'))
+            self.assertEqual(self.native.apply(TASK,TWO,[ONE,TWO]),('pending','background_unverified'))
+
+    def test_broken_daemon_socket_is_unreachable_not_absent(self):
+        socket=self.native.home/'app-server-control/app-server-control.sock'
+        socket.parent.mkdir()
+        socket.symlink_to(self.root/'missing-socket')
+        with self.assertRaisesRegex(profile.ProfileError,'background_unreachable'):
+            profile.daemon_snapshot(self.native.home)
+
+    def test_empty_emails_do_not_confirm_daemon_identity(self):
+        with patch.object(profile,'daemon_snapshot',return_value={'absent':False,'loaded':[],'active':False,'email':None}), patch.object(self.native,'activate',return_value=('pending','background_unverified')) as activate:
+            self.assertEqual(self.native.apply(dict(TASK,accountId=ONE['accountId']),dict(ONE,email=None),[ONE,TWO]),('pending','background_unverified'))
+            activate.assert_called_once()
 
     def test_activity_status_allows_idle_but_guards_approval_and_unknown(self):
         self.assertFalse(profile.activity_state([{'type':'idle'},{'type':'notLoaded'}]))
@@ -139,7 +151,37 @@ class DeviceTests(unittest.TestCase):
         self.save_target()
         idle={'absent':False,'loaded':['still-open'],'active':False,'email':ONE['email']}
         with patch.object(profile,'daemon_snapshot',side_effect=[idle,idle,dict(idle,active=True)]), patch.object(profile.subprocess,'run') as run:
-            self.assertEqual(self.native.apply(TASK,TWO,[ONE,TWO]),('attention','background_unverified'))
+            self.assertEqual(self.native.apply(TASK,TWO,[ONE,TWO]),('pending','background_unverified'))
+            run.assert_not_called()
+
+    @unittest.skipUnless(HAS_TOMLKIT, 'optional Mac runtime tomlkit is not installed')
+    def test_activation_retries_without_overwriting_original_backup(self):
+        self.save_target()
+        original = (self.native.home/'auth.json').read_bytes()
+        idle = {'absent':False,'loaded':[],'active':False,'email':ONE['email']}
+        with patch.object(profile,'daemon_snapshot',return_value=idle), patch.object(profile.subprocess,'run',side_effect=OSError('fixture')):
+            self.assertEqual(self.native.apply(TASK,TWO,[ONE,TWO]),('pending','background_unverified'))
+        self.native.remember_intent(TASK)  # our write must not be mistaken for an external change
+        self.native.next_activation_at = 0
+        after = dict(idle,email=TWO['email'])
+        with patch.object(profile,'daemon_snapshot',side_effect=[idle,idle,ABSENT,idle,after]), patch.object(profile.subprocess,'run') as run, patch.object(profile.time,'sleep'):
+            self.assertEqual(self.native.apply(TASK,TWO,[ONE,TWO]),('completed','applied'))
+            run.assert_called_once()
+        backups = list((self.native.state/'backups').glob('*/auth.json'))
+        self.assertEqual(len(backups),1)
+        self.assertEqual(backups[0].read_bytes(),original)
+        profile.atomic(self.native.home/'auth.json',json.dumps(auth('third','workspace-third')))
+        with self.assertRaisesRegex(profile.ProfileError,'profile_changed'):
+            self.native.remember_intent(TASK)
+
+    def test_activation_retry_waits_for_active_work_and_throttles_restarts(self):
+        idle = {'absent':False,'loaded':[],'active':False,'email':ONE['email']}
+        with patch.object(profile,'daemon_snapshot',return_value=dict(idle,active=True)), patch.object(profile.subprocess,'run') as run:
+            self.assertEqual(self.native.activate(TWO),('pending','background_unverified'))
+            run.assert_not_called()
+        self.native.next_activation_at = float('inf')
+        with patch.object(profile,'daemon_snapshot',return_value=idle), patch.object(profile.subprocess,'run') as run:
+            self.assertEqual(self.native.activate(TWO),('pending','background_unverified'))
             run.assert_not_called()
 
     @unittest.skipUnless(HAS_TOMLKIT, 'optional Mac runtime tomlkit is not installed')
@@ -163,6 +205,37 @@ class DeviceTests(unittest.TestCase):
         value=agent.Agent({'stateDir':str(self.root/'agent'), 'codexHome':str(self.native.home),'codexBinary':'/fixture/codex'})
         value.identities=[ONE,TWO]
         return value
+
+    def test_legacy_attention_recovers_only_the_already_written_target(self):
+        value=self.make_agent()
+        task=dict(TASK,state='attention',reason='background_unverified')
+        with patch.object(value.profile,'activate') as activate:
+            value.process(task)
+            activate.assert_not_called()  # disk still belongs to ONE
+            self.assertIsNone(value.report)
+        profile.atomic(value.profile.home/'auth.json',json.dumps(auth('two','workspace-two')))
+        value.current=TWO['accountId']
+        with patch.object(value.profile,'activate') as activate:
+            value.process(task)
+            activate.assert_not_called()
+        self.assertEqual(value.report['state'],'completed')
+        value.report=None
+        with patch.object(value.profile,'activate') as activate:
+            value.process(dict(task,state='cancelled'))
+            activate.assert_not_called()
+            self.assertIsNone(value.report)
+
+    def test_bootstrap_heartbeat_does_not_erase_confirmed_identity(self):
+        value=self.make_agent()
+        value.config.update(deviceId='fixture',sshKey='/fixture/key',sshTarget='fixture',remoteHelper='/fixture/helper')
+        response=Mock(stdout=json.dumps({'identities':[ONE,TWO],'task':None}).encode())
+        with patch.object(agent.subprocess,'run',return_value=response) as run, patch.object(agent,'daemon_snapshot',return_value=ABSENT):
+            value.heartbeat()
+            payload=json.loads(run.call_args.kwargs['input'])
+            self.assertNotIn('currentAccountId',payload)
+            self.assertNotIn('knownAccountIds',payload)
+            value.heartbeat()
+            self.assertEqual(json.loads(run.call_args.kwargs['input'])['currentAccountId'],ONE['accountId'])
 
     def test_missing_grant_requests_login_without_automatic_oauth(self):
         value=self.make_agent()

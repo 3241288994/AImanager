@@ -90,7 +90,7 @@ def map_identity(auth, identities):
 def daemon_snapshot(home, check_activity=True):
     from websockets.sync.client import unix_connect
     socket = home / 'app-server-control/app-server-control.sock'
-    if not socket.exists():
+    if not os.path.lexists(socket):
         return {'absent': True, 'loaded': [], 'active':False, 'email': None}
     try:
         with unix_connect(socket, open_timeout=3, close_timeout=1, max_size=1024 * 1024,
@@ -142,6 +142,7 @@ def activity_state(statuses):
 class NativeProfile:
     def __init__(self, state: Path, home: Path):
         self.state, self.home = state, home
+        self.next_activation_at = 0.0
         self.grants = state / 'grants'
         self.grants.mkdir(parents=True, exist_ok=True, mode=0o700)
 
@@ -181,10 +182,15 @@ class NativeProfile:
         current_auth = read_auth(self.home / 'auth.json')
         current_identity = identity(current_auth)
         snapshot = daemon_snapshot(self.home)
-        if matches(current_auth, expected) and (snapshot['absent'] or (snapshot['email'] or '').lower() == (expected.get('email') or '').lower()):
+        email = (expected.get('email') or '').lower()
+        if matches(current_auth, expected) and (snapshot['absent'] or (email and (snapshot['email'] or '').lower() == email)):
             self.capture(identities)
             return 'completed', 'applied'
         self.remember_intent(task)
+        if matches(current_auth, expected):
+            # A previous attempt already wrote this identity. Retry activation
+            # without rewriting credentials, config, or the original backup.
+            return self.activate(expected)
         if snapshot['active']:
             return 'pending', 'sessions_loaded'
         self.capture(identities)
@@ -219,6 +225,10 @@ class NativeProfile:
             atomic(config_path, tomlkit.dumps(config))
             if not matches(read_auth(auth_path), expected):
                 raise ProfileError('identity_mismatch')
+            # Our own write becomes the baseline for pending activation retries.
+            # A later external identity change must still stop the request.
+            atomic(self.state / 'pending-profile.json', json.dumps({
+                'requestId':task['requestId'], 'identity':identity(auth)}))
         except Exception:
             for path, value in [(auth_path, previous_auth), (config_path, previous_config)]:
                 if value is not None:
@@ -228,19 +238,35 @@ class NativeProfile:
             raise ProfileError('profile_unavailable') from None
         if before['absent']:
             return 'completed', 'applied'
-        # Recheck after writing: another client can connect between admission and
-        # activation. Never restart it then; report unverified rather than success.
+        return self.activate(expected)
+
+    def activate(self, expected):
+        # Recheck after writing: another client can start work between admission
+        # and activation. Keep the request pending until a safe retry is possible.
         try:
-            if daemon_snapshot(self.home)['active']:
-                return 'attention', 'background_unverified'
+            before = daemon_snapshot(self.home)
+            if before['active'] or time.monotonic() < self.next_activation_at:
+                return 'pending', 'background_unverified'
+            self.next_activation_at = time.monotonic() + 15
             binary = self.home / 'packages/app-server-daemon/current/bin/codex'
             subprocess.run([str(binary), 'app-server','daemon','restart'],
                            env={**os.environ, 'CODEX_HOME':str(self.home)},
                            stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
                            timeout=15, check=True)
-            after = daemon_snapshot(self.home)
-            if (after['email'] or '').lower() == (expected.get('email') or '').lower():
-                return 'completed', 'applied'
+            # Process startup/socket readiness does not guarantee auth readiness.
+            # A missing socket during restart is never proof of activation.
+            deadline = time.monotonic() + 5
+            while True:
+                try:
+                    after = daemon_snapshot(self.home, check_activity=False)
+                    email = (expected.get('email') or '').lower()
+                    if not after['absent'] and email and (after['email'] or '').lower() == email:
+                        return 'completed', 'applied'
+                except ProfileError:
+                    pass
+                if time.monotonic() >= deadline:
+                    break
+                time.sleep(.25)
         except Exception:
             pass
-        return 'attention', 'background_unverified'
+        return 'pending', 'background_unverified'

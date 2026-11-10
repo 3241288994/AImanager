@@ -134,6 +134,14 @@ def profile_env(root, item):
                 "XDG_CONFIG_HOME": str(home / ".config"), "XDG_DATA_HOME": str(home / ".local/share"),
                 "XDG_CACHE_HOME": str(home / ".cache"), "TERM": "xterm-256color", "NO_COLOR": "1",
                 "BROWSER": "true", "SSH_CONNECTION": "aimanager-managed-profile", "DISABLE_AUTOUPDATER": "1"})
+    if item["provider"] == "claude" and sys.platform == "darwin":
+        # macOS resolves the login keychain through the real user's HOME.
+        # Claude officially isolates subscription accounts by CLAUDE_CONFIG_DIR;
+        # do not invent a new home/keychain or fall back to plaintext tokens.
+        import pwd
+        user = pwd.getpwuid(os.getuid())
+        env.update(HOME=user.pw_dir, USERPROFILE=user.pw_dir,
+                   USER=user.pw_name, LOGNAME=user.pw_name)
     return home, env
 
 

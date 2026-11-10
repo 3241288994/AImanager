@@ -23,6 +23,35 @@ def unused_port():
 
 
 class ConnectionProcessTest(unittest.TestCase):
+    def test_repair_detaches_and_returns_one_verified_line(self):
+        scripts = Path(__file__).resolve().parents[1]
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            provider, provider_url = start_fake("local")
+            self.addCleanup(provider.server_close)
+            self.addCleanup(provider.shutdown)
+            config = root / "config.toml"
+            port = unused_port()
+            config.write_text(f'[router]\nlisten_addr="127.0.0.1:{port}"\n[[providers]]\nid="local"\nmcp_url="{provider_url}/mcp"\n')
+            env_file = root / "launcher.env"
+            env_file.write_text("\n".join(("LABCONTEXT_ENABLE_SSH=0", "LABCONTEXT_ENABLE_TUNNEL=0",
+                                f"LABCONTEXT_STATUS_FILE={root / 'launcher.json'}",
+                                f"LABCONTEXT_RECOVERY_STATUS_FILE={root / 'recovery.json'}",
+                                f"LABCONTEXT_RECOVERY_LOG_FILE={root / 'recovery.log'}")))
+            command = [sys.executable, str(scripts / "labcontext.py"), "--env-file", str(env_file), "--config", str(config)]
+            try:
+                first = subprocess.run([*command, "repair"], capture_output=True, text=True, timeout=30)
+                self.assertEqual(first.returncode, 0, first.stdout + first.stderr)
+                self.assertEqual(first.stdout, "labcontext: 连接成功\n")
+                self.assertEqual(first.stderr, "")
+                pid = json.loads((root / "launcher.json").read_text())["launcherPid"]
+                second = subprocess.run([*command, "repair"], capture_output=True, text=True, timeout=15)
+                self.assertEqual(second.returncode, 0, second.stdout + second.stderr)
+                self.assertEqual(second.stdout, "labcontext: 连接成功\n")
+                self.assertEqual(json.loads((root / "launcher.json").read_text())["launcherPid"], pid)
+            finally:
+                subprocess.run([*command, "stop"], capture_output=True, timeout=15)
+
     def test_real_tunnel_switch_keeps_router_and_provider_alive(self):
         scripts = Path(__file__).resolve().parents[1]
         with tempfile.TemporaryDirectory() as directory:
@@ -41,6 +70,8 @@ class ConnectionProcessTest(unittest.TestCase):
                       "LABCONTEXT_TUNNEL_PROFILE": "old", "LABCONTEXT_TUNNEL_CLIENT": str(client),
                       "LABCONTEXT_TUNNEL_HEALTH_URL": f"http://127.0.0.1:{tunnel_port}",
                       "LABCONTEXT_STATUS_FILE": str(root / "launcher.json"), "TEST_TUNNEL_PORT": str(tunnel_port),
+                      "LABCONTEXT_RECOVERY_STATUS_FILE": str(root / "recovery.json"),
+                      "LABCONTEXT_RECOVERY_LOG_FILE": str(root / "recovery.log"),
                       "LABCONTEXT_ENV_FILE": str(env_file), "CONTROL_PLANE_API_KEY": "offline-original-test-key"}
             env_file.write_text("\n".join(f"{key}={value}" for key, value in values.items()))
             original_env = env_file.read_bytes()

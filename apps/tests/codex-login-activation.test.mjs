@@ -78,6 +78,7 @@ test("queued switch feedback distinguishes blocked, changed, expired and unverif
   assert.equal(codexSwitchMessage({state: "completed"}), null);
   assert.match(codexSwitchMessage({state: "pending", reason: "sessions_loaded"}), /2 秒.*空闲会话无需退出/);
   assert.match(codexSwitchMessage({state: "pending", reason: "background_unreachable"}), /尚未替换/);
+  assert.match(codexSwitchMessage({state: "pending", reason: "background_unverified"}), /凭据已更新.*自动重试/);
   assert.match(codexSwitchMessage({state: "failed", reason: "expired"}), /24 小时/);
   assert.match(codexSwitchMessage({state: "failed", reason: "profile_changed"}), /其他入口/);
   assert.match(codexSwitchMessage({state: "attention"}), /尚未核实/);

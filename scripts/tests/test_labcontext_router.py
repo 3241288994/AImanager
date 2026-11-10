@@ -657,18 +657,23 @@ class LauncherTest(unittest.TestCase):
 
     def test_recovery_worker_waits_for_concurrent_launcher_to_be_ready(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
-            values = {"LABCONTEXT_RECOVERY_LOG_FILE": str(Path(directory) / "repair.log")}
+            values = {"LABCONTEXT_RECOVERY_LOG_FILE": str(Path(directory) / "repair.log"),
+                      "LABCONTEXT_STATUS_FILE": str(Path(directory) / "launcher.json"),
+                      "LABCONTEXT_RECOVERY_STATUS_FILE": str(Path(directory) / "recovery.json")}
             child = mock.Mock(pid=42)
             child.poll.return_value = 0
             with mock.patch("labcontext.recovery_preflight", return_value=(0, "ok", True)), \
                     mock.patch("labcontext.fetch_router_status", side_effect=[None, {"overall": "degraded"}, {"overall": "ready"}]), \
                     mock.patch("labcontext.load_config", return_value=mock.Mock(listen_addr="127.0.0.1:1460")), \
+                    mock.patch("labcontext_repair.transport_ports_open", return_value=True), \
+                    mock.patch("labcontext.stop_running_stack") as stop, \
                     mock.patch("labcontext.subprocess.Popen", return_value=child), \
                     mock.patch("labcontext.time.sleep"), \
                     mock.patch("labcontext.write_recovery_status") as write:
                 result = recovery_worker(Path(directory) / "config.toml", values)
             self.assertEqual(result, 0)
             self.assertEqual(write.call_args.args[1]["phase"], "succeeded")
+            stop.assert_called_once()  # Re-check even when preflight stopped an earlier launcher.
 
 
 if __name__ == "__main__":

@@ -303,6 +303,17 @@ pub(crate) fn direct_background_matches(account_id: &str, home: &Path) -> bool {
         .and_then(|c| c.email).is_some_and(|email| crate::codex_daemon_sync::identity_matches(home, &email))
 }
 
+// Activation retries never write auth/config files or refresh a second token copy.
+pub(crate) fn activate_direct_background(account_id: &str, home: &Path) -> bool {
+    let email = open_storage().ok().and_then(|s| s.find_token_by_account_id(account_id).ok().flatten())
+        .and_then(|t| codexmanager_core::auth::parse_id_token_claims(&t.id_token).ok())
+        .and_then(|c| c.email);
+    email.as_deref().is_some_and(|email| {
+        crate::codex_daemon_sync::after_profile_write(home, Some(email)).is_none()
+            && crate::codex_daemon_sync::identity_matches(home, email)
+    })
+}
+
 // Caller holds the shared profile mutation lock and has checked daemon readiness.
 pub(crate) fn apply_direct_account_now(
     account_id: Option<&str>,

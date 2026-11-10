@@ -23,6 +23,7 @@ export const EN_RUNTIME_UI_MESSAGES: MessageCatalog = {
   "等待本机 Codex 会话退出，不会中断任务": "Waiting for Mac Codex sessions to exit; tasks are not interrupted",
   "暂时无法核实本机后台，尚未切换": "Mac background state cannot be verified; not switched",
   "等待 Mac 处理同步请求": "Waiting for the Mac to process the request",
+  "凭据已更新，正在等待后台确认身份；任务空闲后会自动重试，无需重复登录。": "Credentials updated; waiting for background identity verification. Retries automatically when tasks are idle; no new login needed.",
   "本机凭据已更新，后台身份尚未确认": "Mac credentials updated; background identity not verified",
   "授权账号与目标不一致，未切换": "Authorized account does not match the target; not switched",
   "本机身份已在其他入口改变，未覆盖": "Mac identity changed elsewhere; not overwritten",

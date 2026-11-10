@@ -248,7 +248,7 @@ def local_provider_command(values: dict[str, str]) -> list[str] | None:
     return command
 
 
-def doctor(config_path: Path, values: dict[str, str]) -> int:
+def doctor(config_path: Path, values: dict[str, str], *, recovery: bool = False) -> int:
     config = load_config(config_path)
     address = parse_listen_addr(config.listen_addr)
     print(f"router config: ok ({config_path})")
@@ -261,14 +261,22 @@ def doctor(config_path: Path, values: dict[str, str]) -> int:
         if not values.get("LABCONTEXT_SSH_HOST"):
             fail("LABCONTEXT_ENABLE_SSH=1 requires LABCONTEXT_SSH_HOST")
         print(f"SSH bridge: configured ({values['LABCONTEXT_SSH_HOST']})")
-        ok, detail = probe_ssh(values)
+        ssh_runtime = runtime_component(values, "ssh-bridge")
+        running = bool(ssh_runtime and ssh_runtime.get("status") == "running")
+        # One successful reverse-forward probe also validates SSH authentication.
+        # Do not open a separate login first when recovering a stopped stack.
+        combined = recovery and not running and bool(values.get("LABCONTEXT_SERVER_PROXY_REMOTE_PORT"))
+        if combined:
+            configured_local, configured_remote = ssh_config_forwardings(values)
+            combined = not configured_local and not configured_remote
+        ok, detail = probe_ssh_remote_forward(values) if combined else probe_ssh(values)
         if not ok:
-            print(f"SSH connection: failed ({detail})", file=sys.stderr)
+            label = "SSH reverse forwarding" if "remote port forwarding failed" in detail.lower() else "SSH connection"
+            print(f"{label}: failed ({detail})", file=sys.stderr)
             print_ssh_recovery_hint(values)
             return 2
         print(f"SSH connection: ok ({detail})")
-        ssh_runtime = runtime_component(values, "ssh-bridge")
-        if not ssh_runtime or ssh_runtime.get("status") != "running":
+        if not running and not combined:
             forwarding_ok, forwarding_detail = probe_ssh_remote_forward(values)
             if not forwarding_ok:
                 print(f"SSH reverse forwarding: failed ({forwarding_detail})", file=sys.stderr)
@@ -291,7 +299,11 @@ def doctor(config_path: Path, values: dict[str, str]) -> int:
         print(f"Secure MCP Tunnel: configured ({profile['profile']})")
     else:
         print("Secure MCP Tunnel: disabled")
-    runtime = fetch_router_status(address)
+    # Recovery already checked the old runtime and will verify the new one.
+    # Re-running full MCP probes here can add another entire upstream timeout.
+    if recovery:
+        return 0
+    runtime = fetch_router_status(address, force=True)
     if runtime:
         print(f"runtime: {runtime.get('overall', 'ready')} (router already running)")
     else:
@@ -536,22 +548,37 @@ def router_base_url(address: tuple[str, int]) -> str:
     return f"http://{address[0]}:{address[1]}"
 
 
-def fetch_json(url: str, timeout: float = 1.5) -> dict[str, object] | None:
+def fetch_json(url: str, timeout: float = 1.5, *, fallback_url: str | None = None) -> dict[str, object] | None:
     request = Request(url, headers={"Accept": "application/json"}, method="GET")
+    started = time.monotonic()
     try:
-        response = build_opener(ProxyHandler({})).open(request, timeout=timeout)
-        value = json.loads(response.read().decode("utf-8") or "{}")
+        with build_opener(ProxyHandler({})).open(request, timeout=timeout) as response:
+            value = json.loads(response.read().decode("utf-8") or "{}")
         return value if isinstance(value, dict) else None
-    except (HTTPError, URLError, TimeoutError, OSError, json.JSONDecodeError):
+    except HTTPError as exc:
+        # Only a missing endpoint permits a legacy fallback. A timed-out full
+        # check must never be replaced by an older cached "ready" snapshot.
+        remaining = timeout - (time.monotonic() - started)
+        if exc.code == 404 and fallback_url and remaining > 0:
+            return fetch_json(fallback_url, timeout=remaining)
+        return None
+    except (URLError, TimeoutError, OSError, json.JSONDecodeError):
         return None
 
 
-def fetch_router_status(address: tuple[str, int]) -> dict[str, object] | None:
+def fetch_router_status(address: tuple[str, int], *, force: bool = False,
+                        timeout: float | None = None) -> dict[str, object] | None:
     base = router_base_url(address)
-    status = fetch_json(f"{base}/api/status")
+    if force:
+        status = fetch_json(f"{base}/api/status?refresh=1", timeout=30 if timeout is None else timeout,
+                            fallback_url=f"{base}/api/status")
+    else:
+        status = fetch_json(f"{base}/api/status")
     router = status.get("router") if status else None
     if isinstance(router, dict) and router.get("name") == "LabContext Router":
         return status
+    if timeout is not None:
+        return None
     # Older routers do not expose /api/status. Recognize their health payload so
     # an upgrade does not accidentally start a duplicate stack.
     legacy = fetch_json(f"{base}/healthz")
@@ -648,7 +675,7 @@ def write_runtime_status(
 def show_status(config_path: Path) -> int:
     config = load_config(config_path)
     address = parse_listen_addr(config.listen_addr)
-    status = fetch_router_status(address)
+    status = fetch_router_status(address, force=True)
     if not status:
         fail(f"LabContext Router is not reachable at {router_base_url(address)}")
     print(json.dumps(status, ensure_ascii=False, indent=2))
@@ -828,29 +855,35 @@ def stop_running_stack(config_path: Path, values: dict[str, str]) -> bool:
 def recovery_preflight(
     config_path: Path,
     values: dict[str, str],
+    *, stack_stopped: bool = False, quick: bool = False,
 ) -> tuple[int, str, bool]:
-    result, diagnostics = capture_doctor(config_path, values)
-    if result == 0 or "remote port forwarding failed" not in diagnostics.lower():
-        return result, diagnostics, False
+    def check():
+        return capture_doctor(config_path, values, recovery=True) if quick else capture_doctor(config_path, values)
 
-    stop_running_stack(config_path, values)
-    stack_stopped = True
-    retry_result, retry_diagnostics = capture_doctor(config_path, values)
-    diagnostics = "\n\n".join((
-        diagnostics,
-        "After stopping the verified local LabContext stack:\n" + retry_diagnostics,
-    ))
-    if retry_result == 0:
-        return 0, diagnostics, stack_stopped
-    if "remote port forwarding failed" not in retry_diagnostics.lower():
-        return retry_result, diagnostics, stack_stopped
+    result, diagnostics = check()
+    if result == 0 or "remote port forwarding failed" not in diagnostics.lower():
+        return result, diagnostics, stack_stopped
+
+    retry_result = result
+    if not stack_stopped:
+        stop_running_stack(config_path, values)
+        stack_stopped = True
+        retry_result, retry_diagnostics = check()
+        diagnostics = "\n\n".join((
+            diagnostics,
+            "After stopping the verified local LabContext stack:\n" + retry_diagnostics,
+        ))
+        if retry_result == 0:
+            return 0, diagnostics, stack_stopped
+        if "remote port forwarding failed" not in retry_diagnostics.lower():
+            return retry_result, diagnostics, stack_stopped
 
     cleaned, cleanup_detail = cleanup_managed_remote_forward(values)
     diagnostics += "\n\nManaged remote bridge cleanup:\n" + cleanup_detail
     if not cleaned:
         return retry_result, diagnostics, stack_stopped
 
-    final_result, final_diagnostics = wait_for_post_cleanup_validation(config_path, values)
+    final_result, final_diagnostics = wait_for_post_cleanup_validation(config_path, values, quick=quick)
     diagnostics += "\n\nAfter managed bridge cleanup:\n" + final_diagnostics
     return final_result, diagnostics, stack_stopped
 
@@ -859,6 +892,7 @@ def wait_for_post_cleanup_validation(
     config_path: Path,
     values: dict[str, str],
     timeout_seconds: float = 15.0,
+    *, quick: bool = False,
 ) -> tuple[int, str]:
     """Wait for remote teardown or a concurrently starting healthy stack.
 
@@ -874,7 +908,8 @@ def wait_for_post_cleanup_validation(
     last_diagnostics = "post-cleanup validation did not run"
 
     while True:
-        last_result, last_diagnostics = capture_doctor(config_path, values)
+        last_result, last_diagnostics = (capture_doctor(config_path, values, recovery=True) if quick
+                                         else capture_doctor(config_path, values))
         if last_result == 0:
             return 0, last_diagnostics
         if "remote port forwarding failed" not in last_diagnostics.lower():
@@ -895,24 +930,9 @@ def wait_for_post_cleanup_validation(
         time.sleep(min(0.5, remaining))
 
 
-def repair(config_path: Path, values: dict[str, str]) -> int:
-    config = load_config(config_path)
-    address = parse_listen_addr(config.listen_addr)
-    status = fetch_router_status(address)
-    if status and status.get("overall") == "ready":
-        print("labcontext: all configured components already passed real capability checks")
-        return 0
-    print("labcontext: validating configuration before recovery")
-    validation, diagnostics, stack_stopped = recovery_preflight(config_path, values)
-    if diagnostics:
-        print(diagnostics, file=sys.stderr if validation != 0 else sys.stdout)
-    if validation != 0:
-        print("labcontext: repair stopped because the remaining conflict could not be safely claimed", file=sys.stderr)
-        return validation
-    if not stack_stopped:
-        stop_running_stack(config_path, values)
-    print("labcontext: starting a fresh stack with the current configuration")
-    return run(config_path, values)
+def repair(config_path: Path, values: dict[str, str], *, verbose: bool = False) -> int:
+    from labcontext_repair import repair_cli
+    return repair_cli(sys.modules[__name__], config_path, values, verbose=verbose)
 
 
 def recover_bridge_conflict(values: dict[str, str], *, allow_cleanup: bool = True) -> tuple[bool, str]:
@@ -1046,12 +1066,12 @@ def runtime_recovery_failure(status: dict[str, object] | None) -> dict[str, obje
     }
 
 
-def capture_doctor(config_path: Path, values: dict[str, str]) -> tuple[int, str]:
+def capture_doctor(config_path: Path, values: dict[str, str], *, recovery: bool = False) -> tuple[int, str]:
     stdout = io.StringIO()
     stderr = io.StringIO()
     try:
         with contextlib.redirect_stdout(stdout), contextlib.redirect_stderr(stderr):
-            result = doctor(config_path, values)
+            result = doctor(config_path, values, recovery=recovery)
     except SystemExit as exc:
         result = exc.code if isinstance(exc.code, int) else 2
         if exc.code and not isinstance(exc.code, int):
@@ -1066,134 +1086,8 @@ def capture_doctor(config_path: Path, values: dict[str, str]) -> tuple[int, str]
 def recovery_worker(config_path: Path, values: dict[str, str]) -> int:
     # Give the HTTP handler enough time to return 202 before the old Router is stopped.
     time.sleep(0.8)
-    job_id = os.environ.get("LABCONTEXT_RECOVERY_JOB_ID", "unknown")
-    started_at = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
-    base: dict[str, object] = {
-        "jobId": job_id,
-        "workerPid": os.getpid(),
-        "startedAt": started_at,
-        "suggestions": [],
-    }
-    write_recovery_status(values, {
-        **base,
-        "phase": "diagnosing",
-        "summary": "正在检查 SSH、端口、Provider 与 Tunnel 配置",
-    })
-    try:
-        result, diagnostics, stack_stopped = recovery_preflight(config_path, values)
-    except (SystemExit, RouterError, OSError, ValueError) as exc:
-        result = 2
-        diagnostics = str(exc)
-        stack_stopped = False
-    if result != 0:
-        write_recovery_status(values, {
-            **base,
-            "phase": "failed",
-            **recovery_failure_from_diagnostics(diagnostics, values),
-            "completedAt": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
-        })
-        return result
-
-    current = fetch_router_status(parse_listen_addr(load_config(config_path).listen_addr))
-    if current and current.get("overall") == "ready":
-        write_recovery_status(values, {
-            **base,
-            "phase": "succeeded",
-            "summary": "LabContext 已恢复，无需重启",
-            "detail": diagnostics,
-            "completedAt": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
-        })
-        return 0
-
-    write_recovery_status(values, {
-        **base,
-        "phase": "restarting",
-        "summary": "安全检查通过，正在重建 LabContext 连接",
-        "detail": diagnostics,
-    })
-    if not stack_stopped:
-        try:
-            stop_running_stack(config_path, values)
-        except (SystemExit, RouterError, OSError, ValueError) as exc:
-            failure = recovery_failure_from_diagnostics(str(exc), values)
-            write_recovery_status(values, {
-                **base,
-                "phase": "failed",
-                **failure,
-                "completedAt": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
-            })
-            return 2
-
-    env_path = Path(values.get("LABCONTEXT_ENV_FILE", str(DEFAULT_ENV_PATH))).expanduser()
-    launcher_script = Path(values.get("LABCONTEXT_LAUNCHER_SCRIPT", str(Path(__file__).resolve()))).expanduser()
-    log_path = Path(values.get(
-        "LABCONTEXT_RECOVERY_LOG_FILE", str(DEFAULT_RECOVERY_LOG_PATH),
-    )).expanduser()
-    command = [
-        sys.executable, str(launcher_script),
-        "--env-file", str(env_path),
-        "--config", str(config_path),
-    ]
-    try:
-        with log_path.open("ab", buffering=0) as log_handle:
-            launcher = subprocess.Popen(
-                command,
-                stdin=subprocess.DEVNULL,
-                stdout=log_handle,
-                stderr=subprocess.STDOUT,
-                env=process_environment(values),
-                start_new_session=True,
-                close_fds=True,
-            )
-    except OSError as exc:
-        write_recovery_status(values, {
-            **base,
-            "phase": "failed",
-            "reasonCode": "launcher_start_failed",
-            "summary": "诊断通过，但新的 LabContext 启动器无法启动",
-            "detail": str(exc),
-            "suggestions": ["运行 labcontext 检查启动器安装与权限。"],
-            "command": "labcontext",
-            "completedAt": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
-        })
-        return 2
-
-    write_recovery_status(values, {
-        **base,
-        "phase": "verifying",
-        "summary": "连接已重建，正在执行真实能力验证",
-        "launcherPid": launcher.pid,
-    })
-    address = parse_listen_addr(load_config(config_path).listen_addr)
-    deadline = time.monotonic() + 45
-    last_status: dict[str, object] | None = None
-    while time.monotonic() < deadline:
-        last_status = fetch_router_status(address)
-        if last_status and last_status.get("overall") == "ready":
-            write_recovery_status(values, {
-                **base,
-                "phase": "succeeded",
-                "summary": "一键修复完成，LabContext 本机链路已恢复",
-                "detail": "Provider 真实调用及已启用传输检查通过；ChatGPT 插件需在目标账号单独验证。",
-                "launcherPid": launcher.pid,
-                "completedAt": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
-            })
-            return 0
-        # A concurrent launcher may already own the stack; run() exits zero
-        # in that case. Keep validating the live Router during its startup,
-        # instead of reporting failure because this redundant child exited.
-        if launcher.poll() not in (None, 0):
-            break
-        time.sleep(1)
-
-    write_recovery_status(values, {
-        **base,
-        "phase": "failed",
-        **runtime_recovery_failure(last_status),
-        "launcherPid": launcher.pid,
-        "completedAt": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
-    })
-    return 2
+    from labcontext_repair import recover
+    return recover(sys.modules[__name__], config_path, values)
 
 
 def stop_processes(processes: list[tuple[str, subprocess.Popen[bytes]]]) -> None:
@@ -1387,7 +1281,9 @@ def run(config_path: Path, values: dict[str, str]) -> int:
             )
         stop_processes(processes)
         try:
-            status_path.unlink()
+            current = read_runtime_status(status_path)
+            if current and current.get("launcherPid") == os.getpid():
+                status_path.unlink()
         except FileNotFoundError:
             pass
     return 0
@@ -1406,7 +1302,8 @@ def main() -> int:
     init_parser.add_argument("--force", action="store_true")
     subparsers.add_parser("doctor", help="validate configuration and dependencies")
     subparsers.add_parser("status", help="show layered runtime and connection diagnostics")
-    subparsers.add_parser("repair", help="validate, stop a degraded stack, and restart it cleanly")
+    repair_parser = subparsers.add_parser("repair", help="restore and verify the connection (one-line result)")
+    repair_parser.add_argument("--verbose", action="store_true", help="also show diagnostic details and log location")
     subparsers.add_parser("restart", help="stop the current stack and start it with current configuration")
     subparsers.add_parser("stop", help="stop the current supervised stack cleanly")
     from labcontext_connection_cli import add_parser, connections_command
@@ -1451,7 +1348,7 @@ def main() -> int:
     if args.command == "status":
         return show_status(config_path)
     if args.command == "repair":
-        return repair(config_path, values)
+        return repair(config_path, values, verbose=args.verbose)
     if args.command == "restart":
         stop_running_stack(config_path, values)
         return run(config_path, values)

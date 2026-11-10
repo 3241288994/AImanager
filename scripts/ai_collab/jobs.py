@@ -16,6 +16,7 @@ import uuid
 
 from .config import CollabError, atomic_json, read_json, resolve, state_path, user_home
 from . import providers, native
+from .processes import process_identity
 
 FINAL = {"succeeded", "failed", "cancelled", "timed_out", "interrupted"}
 MAX_CONTEXT = 1024 * 1024
@@ -31,15 +32,6 @@ def directory(job_id):
     if not re.fullmatch(r"[a-f0-9]{32}", job_id):
         raise CollabError("invalid_job_id", "Expected a job ID returned by run")
     return state_path() / "jobs" / job_id
-
-
-def process_identity(pid):
-    try:
-        # /proc starttime prevents confusing a reused PID with the original worker.
-        text = Path("/proc/{}/stat".format(pid)).read_text()
-        return text.rsplit(")", 1)[1].split()[19]
-    except (OSError, IndexError):
-        return None
 
 
 def snapshot_file(path):
@@ -257,10 +249,12 @@ def status(job_id):
         raise CollabError("job_not_found", "No such collaboration job")
     if state["state"] not in FINAL:
         pid = state.get("workerPid")
-        if pid and process_identity(pid) != state.get("workerIdentity"):
+        if pid and (not isinstance(state.get("workerIdentity"), str)
+                    or process_identity(pid) != state["workerIdentity"]):
             # Diagnostic only: never overwrite worker-owned state or signal a stale PID.
             state.update(state="interrupted", error={"code": "worker_lost", "message": "Worker exited without a final result; upstream execution may be incomplete"})
-            if state.get("providerPid") and process_identity(state["providerPid"]) == state.get("providerIdentity"):
+            if (state.get("providerPid") and isinstance(state.get("providerIdentity"), str)
+                    and process_identity(state["providerPid"]) == state["providerIdentity"]):
                 state["providerStillRunning"] = True
         elif not pid and time.time() - state["createdAt"] > 30:
             state.update(state="interrupted", error={"code": "worker_not_started", "message": "Worker did not start"})

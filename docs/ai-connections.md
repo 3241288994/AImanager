@@ -37,6 +37,29 @@
 服务器的 16969 入口依赖 Mac 在线、账号池运行及其独立反向 SSH 通道。LabContext 桥接健康不能
 证明此通道健康。账号恢复或验证码请在原账号池界面处理，不将 Cookie / 密码上传服务器。
 
+### 独立 SSH 通道的断链恢复
+
+远端端口冲突或健康请求超时时，先分别验证 Mac 账号池、反向转发和服务端接入地址。
+不能确认归属的监听进程不得直接终止；可选择另一个空闲的回环端口，并同步 SSH
+`RemoteForward`、服务器私有 `client.env` 的 `GEMINI_WEB_BASE_URL` 和接入中心保存的地址。
+16969 是初始默认值，不应在协作脚本里写死；Mac 本机入口仍为 6969。
+
+`scripts/gemini_web_tunnel_watchdog.py` 可部署到服务器并作为**专用、非复用** SSH 连接的
+远端命令：去掉 `ssh -N`，仅保留该账号池的一条反向转发，显式禁用 ControlMaster / ControlPath / ControlPersist。
+例如远端命令为 `exec python3 /私有部署目录/tunnel_watchdog.py --port <远端端口> --managed-ssh`。
+客户端进程需交由现有进程管理器在退出后重启，保留 `ExitOnForwardFailure` 和 SSH 心跳。
+这不是一键安装器，不自动修改其他通道或整个 sshd 的配置。
+
+看门狗每 30 秒向本机反向转发端口发送无凭据的 `HEAD /health`，单次最多 5 秒。
+任何 HTTP 响应（包括不支持 HEAD 的 405、登录/额度错误）都表示通道有响应；
+仅连续三次网络失败才结束专用会话。不发送模型请求，不刷新账号，不根据连通性推测额度。
+Linux 下仅允许通过 pidfd 结束同用户、直接父进程且已验证身份的 sshd，避免 PID 复用或误停
+其他 SSH 会话；Python 3.8 的 Linux x86_64 主机使用同一内核 pidfd 接口。
+不支持 pidfd 时只退出远端命令，不回退到按 PID 盲目杀进程。
+Mac 休眠或离线时 API 仍不可用；恢复联网后由进程管理器重连。
+
+离线测试：`python3 -m unittest discover -s scripts/tests -p test_gemini_web_tunnel_watchdog.py -v`。
+
 其他私有反代可选择 `aimanager-env`，在**服务进程环境**配置 `AIMANAGER_UPSTREAM_API_KEY` 后
 重启 Service。此变量默认未设置，只被对应入口的显式探测读取，不覆盖任何现有 app setting。
 该来源目前共用一个密钥，不适合需要不同密钥的多个上游；不得把密钥填到 URL、名称或 ID 中。

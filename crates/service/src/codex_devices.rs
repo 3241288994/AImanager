@@ -104,7 +104,11 @@ fn terminal(state: &str) -> bool { matches!(state, "completed" | "cancelled" | "
 fn valid_id(id: &str) -> bool { (16..=64).contains(&id.len()) && id.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'-') }
 
 fn apply_report(task: &mut DeviceTask, report: &Value, known: &[String], current: Option<&str>) {
-    if report.get("requestId").and_then(Value::as_str) != Some(&task.request_id) || terminal(&task.state) { return; }
+    if report.get("requestId").and_then(Value::as_str) != Some(&task.request_id) { return; }
+    // Legacy attention records can recover only through a verified completion.
+    if terminal(&task.state) && !(task.state == "attention" && task.reason == "background_unverified"
+        && report.get("state").and_then(Value::as_str) == Some("completed")
+        && report.get("reason").and_then(Value::as_str) == Some("applied")) { return; }
     let state = report.get("state").and_then(Value::as_str).unwrap_or("");
     let reason = report.get("reason").and_then(Value::as_str).unwrap_or("");
     if !["pending","needs_login","authorizing","completed","failed","attention"].contains(&state)
@@ -135,8 +139,12 @@ pub(crate) fn heartbeat(params: &Value) -> Result<Value, String> {
     let device = devices.iter_mut().find(|d| d.id == id).unwrap();
     device.last_seen_at = now_ts();
     let ids:Vec<String> = known_identities.iter().filter_map(|x| x.get("accountId").and_then(Value::as_str).map(str::to_owned)).collect();
+    if params.get("knownAccountIds").is_some() {
     device.known_account_ids = params.get("knownAccountIds").and_then(Value::as_array).map(|a| a.iter().filter_map(Value::as_str).filter(|s| ids.iter().any(|id| id == s)).take(64).map(str::to_owned).collect()).unwrap_or_default();
+    }
+    if params.get("currentAccountId").is_some() {
     device.current_account_id = params.get("currentAccountId").and_then(Value::as_str).filter(|s| ids.iter().any(|id| id == s)).map(str::to_owned);
+    }
     if let Some(task) = &mut device.task {
         if !terminal(&task.state) && now_ts().saturating_sub(task.requested_at) > MAX_AGE {
             task.state = "failed".into(); task.reason = "expired".into(); task.user_code = None; task.verification_url = None;
@@ -161,6 +169,21 @@ mod tests {
         assert_eq!(task.state,"pending");
         apply_report(&mut task,&json!({"requestId":id,"state":"completed","reason":"applied"}),&[],Some("target"));
         assert_eq!(task.state,"completed");
+    }
+    #[test]
+    fn legacy_attention_requires_current_identity_and_cannot_revive_cancelled_tasks() {
+        let mut task = new_task("target", Some("root"), "switch");
+        task.state = "attention".into(); task.reason = "background_unverified".into();
+        let report = json!({"requestId":task.request_id,"state":"completed","reason":"applied"});
+        apply_report(&mut task, &report, &[], Some("other"));
+        assert_eq!(task.state, "attention");
+        apply_report(&mut task, &report, &[], Some("target"));
+        assert_eq!(task.state, "completed");
+        for state in ["cancelled", "failed"] {
+            task.state = state.into();
+            apply_report(&mut task, &report, &[], Some("target"));
+            assert_eq!(task.state, state);
+        }
     }
     #[test]
     fn otp_is_only_available_for_an_explicit_login_on_the_official_origin() {

@@ -1,3 +1,3 @@
 """AImanager lightweight, provider-preserving collaboration tools."""
 
-VERSION = "0.2.0"
+VERSION = "0.2.1"

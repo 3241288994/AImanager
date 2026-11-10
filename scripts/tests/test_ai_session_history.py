@@ -100,7 +100,7 @@ class SessionHistoryTest(unittest.TestCase):
     def test_launcher_pins_nonactive_account_without_switching_default(self):
         # Exercise both actual launcher and actual worker; native CLI is a harmless fixture.
         fake = self.root / "native"
-        fake.write_text("#!/usr/bin/env python3\nimport os,sys,json\nprint(json.dumps({'home':os.environ['HOME'],'args':sys.argv[1:]}))\n")
+        fake.write_text("#!/usr/bin/env python3\nimport os,sys,json\nprint(json.dumps({'home':os.environ['HOME'],'config':os.environ['CLAUDE_CONFIG_DIR'],'args':sys.argv[1:]}))\n")
         fake.chmod(0o700)
         (self.root / "worker.py").write_bytes((SOURCE / "worker.py").read_bytes())
         other = {"id": "b" * 32, "provider": "claude"}
@@ -110,7 +110,12 @@ class SessionHistoryTest(unittest.TestCase):
         args = [sys.executable, str(BASE / "scripts/aimanager-cli"), "claude", "--account-id", self.account["id"], "--", "--resume", SID]
         result = subprocess.run(args, env=env, capture_output=True, text=True, timeout=5, check=True)
         data = json.loads(result.stdout)
-        self.assertEqual(data["home"], str(self.home))
+        if sys.platform == "darwin":
+            import pwd
+            self.assertEqual(data["home"], pwd.getpwuid(os.getuid()).pw_dir)
+        else:
+            self.assertEqual(data["home"], str(self.home))
+        self.assertEqual(data["config"], str(self.home / ".claude"))
         self.assertEqual(data["args"], ["--resume", SID])
         self.assertEqual(json.loads((self.root / "accounts.json").read_text())["active"], registry["active"])
         args[2] = "antigravity"

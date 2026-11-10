@@ -18,7 +18,8 @@ spec.loader.exec_module(worker)
 
 FAKE_CLI = '''#!/usr/bin/env python3
 import json, os, pathlib, sys, time
-home = pathlib.Path(os.environ['HOME'])
+home = pathlib.Path(os.environ.get('CLAUDE_CONFIG_DIR', os.environ['HOME']))
+home.mkdir(parents=True, exist_ok=True)
 if sys.argv[1:] == ['auth', 'status']:
     ready = (home / 'logged-in').is_file()
     print(json.dumps({'loggedIn': ready, 'authMethod': 'claude.ai' if ready else 'none', 'accessToken': 'never-export'}))
@@ -82,6 +83,18 @@ class AiAccountTest(unittest.TestCase):
         self.assertNotIn("ANTHROPIC_API_KEY", env_a)
         self.assertEqual(home_a.stat().st_mode & 0o777, 0o700)
         self.assertEqual((self.root / "accounts.json").stat().st_mode & 0o777, 0o600)
+
+    def test_mac_profile_preserves_os_keychain_home_but_isolates_claude_config(self):
+        import pwd
+        item = self.create()
+        with mock.patch.object(worker.sys, "platform", "darwin"), \
+                mock.patch.dict(os.environ, {"ANTHROPIC_API_KEY": "do-not-inherit", "ANTHROPIC_BASE_URL": "https://unrelated.invalid"}):
+            profile, environment = worker.profile_env(self.root, item)
+        self.assertEqual(environment["HOME"], pwd.getpwuid(os.getuid()).pw_dir)
+        self.assertEqual(environment["CLAUDE_CONFIG_DIR"], str(profile / ".claude"))
+        self.assertEqual(environment["XDG_CONFIG_HOME"], str(profile / ".config"))
+        self.assertNotIn("ANTHROPIC_API_KEY", environment)
+        self.assertNotIn("ANTHROPIC_BASE_URL", environment)
 
     def test_live_pty_login_and_switch_do_not_change_other_profile(self):
         a, b = self.create(), self.create("Account B")

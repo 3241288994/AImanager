@@ -49,6 +49,17 @@ The metadata heartbeat uses reusable SSH connections and bounded 8-second long
 polling in the SSH helper, which checks loopback task metadata every 250 ms.
 The serial RPC service never blocks waiting for a new request. Pending
 work is retried every 2 seconds; network failures back off to 120 seconds.
+After writing local credentials, the Mac waits for daemon identity readiness.
+Temporary activation failures remain pending and retry without overwriting the
+original backup; daemon restarts are spaced at least 15 seconds apart and deferred
+while tasks are active. External identity changes still stop the pending request.
+The service host follows the same two-stage flow: once credentials are written,
+retries only verify/activate the background daemon. Pending intents and restart
+throttling survive service restarts. Repeated requests for the same in-flight
+account preserve the request and any ongoing device authorization. Legacy
+background-verification warnings can recover after identity verification;
+cancelled and failed device requests are never revived. The Mac metadata
+bootstrap preserves the last confirmed identity until a fresh observation exists.
 Offline tasks expire after 24 hours. No listening Mac
 HTTP port, browser-to-local credential channel or new environment variable is used.
 Desktop and Web share administrator-only RPC; ordinary members cannot pair devices.

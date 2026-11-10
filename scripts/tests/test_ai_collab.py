@@ -456,11 +456,12 @@ class CollaborationTest(unittest.TestCase):
         descendant = int(child.stdout.readline())
         child.wait(timeout=5)
         try:
+            original_identity = jobs.process_identity(descendant)
+            self.assertIsInstance(original_identity, str)
             self.assertTrue(jobs.terminate(child))
             deadline = time.monotonic() + 3
             while time.monotonic() < deadline:
-                path = Path("/proc") / str(descendant) / "stat"
-                if not path.exists() or path.read_text().rsplit(")", 1)[1].split()[0] == "Z":
+                if jobs.process_identity(descendant) != original_identity:
                     break
                 time.sleep(0.02)
             else:

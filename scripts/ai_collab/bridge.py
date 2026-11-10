@@ -3,7 +3,7 @@ import json
 from pathlib import Path
 import sys
 
-from . import jobs
+from . import VERSION, jobs
 from .config import CollabError, atomic_json, load, resolve, provider_path
 
 PROPERTIES = {
@@ -140,7 +140,7 @@ def serve():
                 continue
             if method == "initialize":
                 result = {"protocolVersion": request.get("params", {}).get("protocolVersion", "2024-11-05"),
-                          "capabilities": {"tools": {}}, "serverInfo": {"name": "AImanager collaboration", "version": "0.2.0"}}
+                          "capabilities": {"tools": {}}, "serverInfo": {"name": "AImanager collaboration", "version": VERSION}}
             elif method == "ping":
                 result = {}
             elif method == "tools/list":

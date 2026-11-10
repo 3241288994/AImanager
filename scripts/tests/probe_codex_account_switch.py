@@ -43,6 +43,7 @@ class Daemon:
         self.profile = profile
         self.loaded = True
         self.active = True
+        self.identity_ready = True
         self.socket = socket.socket(socket.AF_UNIX)
         path = profile / 'app-server-control/app-server-control.sock'
         path.parent.mkdir()
@@ -92,7 +93,7 @@ class Daemon:
                             result = {'thread':{'id':request['params']['threadId'],'status':{'type':'active' if self.active else 'idle','activeFlags':[]}}}
                         elif method == 'account/read':
                             account = json.loads((self.profile / 'auth.json').read_text())['tokens']['account_id']
-                            result = {'account': {'type': 'chatgpt', 'email': account + '@example.invalid'}}
+                            result = {'account': {'type': 'chatgpt', 'email': account + '@example.invalid'} if self.identity_ready else None}
                         else:
                             assert method == 'initialize'
                             result = {}
@@ -200,6 +201,7 @@ def main(binary):
             first = apply('b')['accountSwitch']
             assert first['state'] == 'pending' and first['reason'] == 'sessions_loaded'
             assert auth.read_bytes() == unchanged
+            assert apply('b')['accountSwitch']['requestId'] == first['requestId'], 'duplicate clicks must preserve request scope'
             second = apply('a')['accountSwitch']
             assert second['requestId'] != first['requestId']
             rpc('codexProfile/cancelSwitch', {'requestId': first['requestId']}, error=True)
@@ -224,6 +226,18 @@ def main(binary):
             assert daemon.loaded, 'idle thread remains open while switching'
             print('PASS loaded-but-idle threads switch, durable queue resumes and rotated credentials survive', flush=True)
 
+            daemon.identity_ready = False
+            pending = apply('b')['accountSwitch']
+            assert pending['state']=='pending' and pending['reason']=='background_unverified'
+            switched = auth.read_bytes()
+            stop(); start()
+            assert rpc('codexProfile/get')['accountSwitch']['requestId']==pending['requestId']
+            daemon.identity_ready = True
+            assert wait_state('completed')['selectedAccountId']=='b'
+            assert auth.read_bytes()==switched, 'verification retries must not rewrite credentials'
+            assert apply('a')['accountSwitch']['state']=='completed'
+            print('PASS delayed background login stays pending, survives restart and recovers without rewriting auth',flush=True)
+
             daemon.loaded = True
             daemon.active = True
             pending = apply('b')['accountSwitch']
@@ -238,6 +252,8 @@ def main(binary):
             mac = {'deviceId':'synthetic-mac-device','currentAccountId':'a','knownAccountIds':['a']}
             paired = rpc('codexDevices/heartbeat',mac)
             assert paired['task'] is None
+            rpc('codexDevices/heartbeat',{'deviceId':mac['deviceId']})
+            assert rpc('codexDevices/status')[0]['currentAccountId']=='a', 'bootstrap must preserve last identity'
             assert all(set(item)=={'accountId','subject','chatgptAccountId','workspaceId','email'} for item in paired['identities'])
             delivered=[]
             receiver=threading.Thread(target=lambda:delivered.append(wait_for_task(paired,mac,rpc,8000)))

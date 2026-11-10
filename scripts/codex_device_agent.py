@@ -100,6 +100,7 @@ class Agent:
         self.state.mkdir(parents=True,exist_ok=True,mode=0o700)
         self.profile=NativeProfile(self.state,Path(config['codexHome']))
         self.identities=[]
+        self.identities_loaded=False
         self.report=None
         self.login=None
         self.task=None
@@ -113,12 +114,17 @@ class Agent:
         if expected:
             try:
                 snapshot=daemon_snapshot(self.profile.home,check_activity=False)
-                if not snapshot['absent'] and (snapshot['email'] or '').lower()!=(expected.get('email') or '').lower():
+                email=(expected.get('email') or '').lower()
+                if not snapshot['absent'] and (not email or (snapshot['email'] or '').lower()!=email):
                     self.current=None
             except ProfileError:
                 self.current=None
         payload={'deviceId':self.config['deviceId'],'currentAccountId':self.current,
                  'knownAccountIds':self.profile.known(self.identities),'report':self.report,'waitMs':8000 if wait else 0}
+        if not self.identities_loaded:
+            # Bootstrap metadata without erasing the last confirmed device state.
+            payload.pop('currentAccountId')
+            payload.pop('knownAccountIds')
         command=['/usr/bin/ssh','-T','-F','/dev/null','-i',self.config['sshKey'],
                  '-o','BatchMode=yes','-o','StrictHostKeyChecking=yes','-o','ConnectTimeout=8',
                  '-o','ClearAllForwardings=yes','-o','ServerAliveInterval=30',
@@ -134,6 +140,7 @@ class Agent:
             if value.get('error') or not isinstance(value.get('identities'),list):
                 raise ValueError()
             self.identities=value['identities']
+            self.identities_loaded=True
             self.sent_report=json.dumps(self.report,sort_keys=True)
             atomic(self.state/'status.json',json.dumps({'updatedAt':int(time.time()),'currentAccountId':self.current,'report':self.report}))
             return value.get('task')
@@ -168,6 +175,18 @@ class Agent:
             session.close()
 
     def process(self, task):
+        if task and task.get('state')=='attention' and task.get('reason')=='background_unverified':
+            self.stop_login()
+            self.task=task
+            expected=next((x for x in self.identities if x['accountId']==task['accountId']),None)
+            # Repair legacy warnings only for the already-written target. Never
+            # replay an old switch over a profile changed by another entry point.
+            if expected and matches(read_auth(self.profile.home/'auth.json'),expected):
+                if self.current==task['accountId']:
+                    self.set_report(task,'completed','applied')
+                elif self.profile.activate(expected)[0]=='completed':
+                    self.set_report(task,'completed','applied')
+            return
         if not task or task.get('state') in TERMINAL:
             self.stop_login()
             self.task=task

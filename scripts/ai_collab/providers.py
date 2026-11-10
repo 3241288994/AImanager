@@ -7,6 +7,7 @@ import re
 import shlex
 import shutil
 import subprocess
+import sys
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -121,8 +122,14 @@ def claude_command(config, route, account_id, workspaces=None, access=None, sess
         if not isinstance(additions, list) or any(not isinstance(p, str) for p in additions):
             raise CollabError("invalid_config", "claude.sandboxPath must contain executable directories")
         env["PATH"] = os.pathsep.join([str(provider_path(p)) for p in additions] + [env.get("PATH", "")])
-        if not shutil.which("bwrap", path=env["PATH"]) or not shutil.which("socat", path=env["PATH"]):
-            raise CollabError("sandbox_unavailable", "Claude exec requires bubblewrap and socat on PATH")
+        if sys.platform == "darwin":
+            if not Path('/usr/bin/sandbox-exec').is_file():
+                raise CollabError("sandbox_unavailable", "Claude exec requires the native macOS Seatbelt sandbox")
+        elif sys.platform.startswith('linux'):
+            if not shutil.which("bwrap", path=env["PATH"]) or not shutil.which("socat", path=env["PATH"]):
+                raise CollabError("sandbox_unavailable", "Claude exec requires bubblewrap and socat on PATH")
+        else:
+            raise CollabError("sandbox_unavailable", "Claude exec is supported only on macOS and Linux")
         tools = "Read,Glob,Grep,Edit,Write,Bash"
         command[command.index("--tools") + 1] = tools
         command[command.index("--allowedTools") + 1] = tools
@@ -157,7 +164,8 @@ def gemini_settings(config):
     for key in ("GEMINI_WEB_BASE_URL", "GEMINI_WEB_API_KEY"):
         if key in os.environ:
             settings[key] = os.environ[key]
-    base = config["geminiWeb"].get("resolvedBaseUrl") or settings.get("GEMINI_WEB_BASE_URL", "http://127.0.0.1:16969/v1")
+    base = (config["geminiWeb"].get("resolvedBaseUrl") or config["geminiWeb"].get("baseUrl")
+            or settings.get("GEMINI_WEB_BASE_URL", "http://127.0.0.1:16969/v1"))
     base = base.rstrip("/")
     url = urllib.parse.urlsplit(base)
     if url.scheme not in {"http", "https"} or not url.hostname or url.username or url.password or url.query or url.fragment:

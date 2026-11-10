@@ -22,6 +22,8 @@ const MAX_AGE: i64 = 24 * 60 * 60;
 pub(crate) struct SwitchStatus {
     #[serde(default)]
     pub sync_devices: bool,
+    #[serde(default)]
+    pub last_activation_at: i64,
     pub request_id: String,
     pub account_id: String,
     pub previous_account_id: Option<String>,
@@ -73,10 +75,20 @@ pub(crate) fn request_scoped(account_id: Option<&str>, home: Option<&str>, sync_
             "current profile identity changed outside AImanager; verify it before switching".into(),
         );
     }
+    // Repeated clicks/network retries keep the same in-flight authorization and
+    // cancellation scope. Failed/cancelled requests still permit a deliberate retry.
+    if let Some(old) = load().filter(|s| s.account_id == id && s.codex_home == profile.codex_home && s.sync_devices == sync_devices) {
+        let device_pending = sync_devices && crate::codex_devices::status()?.iter().any(|d| {
+            d.task.as_ref().is_some_and(|t| t.parent_request_id.as_deref() == Some(old.request_id.as_str())
+                && matches!(t.state.as_str(), "pending" | "needs_login" | "authorizing"))
+        });
+        if retryable(&old) || (old.state == "completed" && device_pending) { return Ok(profile); }
+    }
     codex_profile::validate_switch_target(id)?;
     if let Some(old) = load().filter(|s| s.sync_devices) { crate::codex_devices::cancel_parent(&old.request_id)?; }
     let intent = SwitchStatus {
         sync_devices,
+        last_activation_at: 0,
         request_id: codexmanager_core::auth::generate_state(),
         account_id: id.into(),
         previous_account_id: profile.selected_account_id.clone(),
@@ -141,7 +153,7 @@ fn transition(intent: &mut SwitchStatus, state: &str, reason: &str) -> Result<()
 }
 
 fn advance(mut intent: SwitchStatus) -> Result<(), String> {
-    if intent.state != "pending" {
+    if !retryable(&intent) {
         return Ok(());
     }
     if now_ts().saturating_sub(intent.requested_at) >= MAX_AGE {
@@ -154,6 +166,18 @@ fn advance(mut intent: SwitchStatus) -> Result<(), String> {
     if profile.identity_consistent && profile.selected_account_id.as_deref() == Some(&intent.account_id)
         && codex_profile::direct_background_matches(&intent.account_id, Path::new(&intent.codex_home)) {
         return transition(&mut intent, "completed", "applied");
+    }
+    // Once the target is on disk, only activate the daemon. Never rewrite or
+    // refresh credentials again merely because background verification lagged.
+    if profile.identity_consistent && profile.selected_account_id.as_deref() == Some(&intent.account_id) {
+        if now_ts().saturating_sub(intent.last_activation_at) < 15 { return Ok(()); }
+        intent.last_activation_at = now_ts();
+        save(&intent)?;
+        let verified = codex_profile::activate_direct_background(&intent.account_id, Path::new(&intent.codex_home));
+        return transition(&mut intent, if verified { "completed" } else { "pending" }, if verified { "applied" } else { "background_unverified" });
+    }
+    if intent.last_activation_at > 0 || (intent.state == "attention" && intent.reason == "background_unverified") {
+        return transition(&mut intent, "failed", "profile_changed");
     }
     if let Err(reason) = gate(
         &intent,
@@ -176,7 +200,15 @@ fn advance(mut intent: SwitchStatus) -> Result<(), String> {
             .map(|profile| profile.warnings.is_empty())
         },
     );
+    if reason == "background_unverified" {
+        intent.last_activation_at = now_ts();
+        save(&intent)?;
+    }
     transition(&mut intent, state, reason)
+}
+
+fn retryable(intent: &SwitchStatus) -> bool {
+    intent.state == "pending" || (intent.state == "attention" && intent.reason == "background_unverified")
 }
 
 fn attempt(
@@ -190,7 +222,7 @@ fn attempt(
     }
     match apply() {
         Ok(true) => ("completed", "applied"),
-        Ok(false) => ("attention", "background_unverified"),
+        Ok(false) => ("pending", "background_unverified"),
         Err(error) if error == "codex_background_busy" => ("pending", "sessions_loaded"),
         Err(error) if error == "codex_background_unreachable" => {
             ("pending", "background_unreachable")
@@ -209,7 +241,7 @@ pub(crate) fn start_worker() {
             let Ok(_guard) = LOCK.try_lock() else {
                 continue;
             };
-            if let Some(intent) = load().filter(|s| s.state == "pending") {
+            if let Some(intent) = load().filter(retryable) {
                 if advance(intent).is_err() {
                     log::warn!("Codex pending switch could not be processed; intent retained");
                 }
@@ -225,6 +257,7 @@ mod tests {
     fn queue_contains_only_intent_and_survives_serialization() {
         let intent = SwitchStatus {
             sync_devices: false,
+            last_activation_at: 0,
             request_id: "one".into(),
             account_id: "b".into(),
             previous_account_id: Some("a".into()),
@@ -281,7 +314,7 @@ mod tests {
         );
         assert_eq!(
             attempt(Readiness::Ready, || Ok(false)),
-            ("attention", "background_unverified")
+            ("pending", "background_unverified")
         );
         assert_eq!(
             attempt(Readiness::Ready, || Err("secret upstream response".into())),
