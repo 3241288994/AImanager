@@ -4,6 +4,7 @@ from pathlib import Path
 import sys
 import tempfile
 import importlib.util
+from types import ModuleType
 import unittest
 from unittest.mock import patch, Mock
 
@@ -100,8 +101,14 @@ class DeviceTests(unittest.TestCase):
         socket=self.native.home/'app-server-control/app-server-control.sock'
         socket.parent.mkdir()
         socket.symlink_to(self.root/'missing-socket')
-        with self.assertRaisesRegex(profile.ProfileError,'background_unreachable'):
+        # Source preflight is stdlib-only; exercise the socket boundary without
+        # requiring the optional Mac runtime WebSocket package on Linux CI.
+        connect=Mock(side_effect=ConnectionRefusedError('fixture socket unavailable'))
+        modules={name:ModuleType(name) for name in ('websockets','websockets.sync','websockets.sync.client')}
+        modules['websockets.sync.client'].unix_connect=connect
+        with patch.dict(sys.modules,modules), self.assertRaisesRegex(profile.ProfileError,'background_unreachable'):
             profile.daemon_snapshot(self.native.home)
+        connect.assert_called_once()
 
     def test_empty_emails_do_not_confirm_daemon_identity(self):
         with patch.object(profile,'daemon_snapshot',return_value={'absent':False,'loaded':[],'active':False,'email':None}), patch.object(self.native,'activate',return_value=('pending','background_unverified')) as activate:
